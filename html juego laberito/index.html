@@ -1,0 +1,3388 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ALGO-ENGINE AAA // Sorting, Pathfinding & Split-Screen Race</title>
+    <style>
+        :root {
+            --bg-void: #04060b;
+            --bg-hud: rgba(10, 15, 25, 0.88);
+            --bg-panel: #090d15;
+            --border-tech: #1e293b;
+            --accent-cyan: #00e5ff;
+            --accent-neon: #00ff9d;
+            --accent-purple: #c084fc;
+            --accent-warn: #fbbf24;
+            --accent-danger: #ff2a55;
+            --text-main: #f1f5f9;
+            --text-dim: #64748b;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-void);
+            color: var(--text-main);
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+        }
+
+        /* VIEWPORT PRINCIPAL */
+        .viewport {
+            flex: 1;
+            position: relative;
+            background: radial-gradient(circle at center, #080d18 0%, #030509 100%);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #algoCanvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            cursor: crosshair;
+        }
+
+        /* HUD SUPERIOR */
+        .hud-top-bar {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            right: 12px;
+            display: flex;
+            justify-content: space-between;
+            pointer-events: none;
+            gap: 8px;
+            z-index: 10;
+        }
+
+        .hud-group {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .hud-chip {
+            background: var(--bg-hud);
+            border: 1px solid var(--border-tech);
+            border-left: 3px solid var(--accent-cyan);
+            backdrop-filter: blur(8px);
+            padding: 6px 11px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-family: 'Consolas', monospace;
+            color: var(--text-main);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+        }
+
+        .hud-chip span {
+            color: var(--accent-cyan);
+            font-weight: 700;
+        }
+
+        /* TARJETAS DE TELEMETRÍA FLOTANTES PARA CADA MOTOR (A y B) */
+        .race-banner-container {
+            position: absolute;
+            top: 50px;
+            left: 12px;
+            right: 12px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            height: calc(100% - 105px);
+            pointer-events: none;
+            z-index: 9;
+        }
+
+        .engine-overlay-card {
+            background: rgba(9, 13, 21, 0.82);
+            border: 1px solid #1e293b;
+            border-left: 3px solid var(--accent-neon);
+            backdrop-filter: blur(6px);
+            padding: 7px 12px;
+            border-radius: 5px;
+            width: fit-content;
+            font-family: 'Consolas', monospace;
+            font-size: 11.5px;
+            display: flex;
+            gap: 16px;
+            align-items: center;
+        }
+
+        .engine-overlay-card.card-b {
+            border-left-color: var(--accent-purple);
+            margin-top: auto;
+        }
+
+        .badge-win {
+            background: rgba(0, 255, 157, 0.18);
+            color: var(--accent-neon);
+            border: 1px solid var(--accent-neon);
+            padding: 1px 6px;
+            border-radius: 3px;
+            font-weight: 700;
+            font-size: 10px;
+        }
+
+        /* LEYENDA INFERIOR */
+        .hud-bottom-bar {
+            position: absolute;
+            bottom: 12px;
+            left: 12px;
+            right: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .controls-legend {
+            background: var(--bg-hud);
+            border: 1px solid var(--border-tech);
+            backdrop-filter: blur(8px);
+            padding: 7px 14px;
+            border-radius: 6px;
+            font-size: 11.5px;
+            color: var(--text-dim);
+            display: flex;
+            gap: 16px;
+        }
+
+        .controls-legend b {
+            color: var(--accent-cyan);
+            font-family: 'Consolas', monospace;
+        }
+
+        /* PANEL INSPECTOR LATERAL */
+        .inspector {
+            width: 325px;
+            min-width: 325px;
+            background-color: var(--bg-panel);
+            border-left: 1px solid var(--border-tech);
+            display: flex;
+            flex-direction: column;
+            padding: 13px;
+            gap: 10px;
+            overflow-y: auto;
+            z-index: 20;
+        }
+
+        .engine-brand {
+            border-bottom: 1px solid var(--border-tech);
+            padding-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .engine-brand h1 {
+            font-size: 15px;
+            font-weight: 800;
+            letter-spacing: 0.8px;
+            color: var(--accent-cyan);
+            font-family: 'Consolas', monospace;
+        }
+
+        .engine-version {
+            font-size: 10px;
+            background: rgba(0, 229, 255, 0.14);
+            color: var(--accent-cyan);
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+
+        .panel-section {
+            background: #05080f;
+            border: 1px solid #141e30;
+            border-radius: 6px;
+            padding: 9px 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+        }
+
+        .section-title {
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: var(--accent-cyan);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .btn-row {
+            display: flex;
+            gap: 6px;
+        }
+
+        .btn-grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+        }
+
+        .btn-grid-4 {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 4px;
+        }
+
+        .grid-size-btn {
+            font-size: 10px;
+            padding: 5px 2px;
+        }
+
+        .btn {
+            flex: 1;
+            background: #101826;
+            color: var(--text-main);
+            border: 1px solid #22324a;
+            padding: 7px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.12s ease;
+            text-align: center;
+        }
+
+        .btn:hover {
+            background: #19263b;
+            border-color: var(--accent-cyan);
+            color: #fff;
+        }
+
+        .btn.active-tab {
+            background: rgba(0, 229, 255, 0.18);
+            border-color: var(--accent-cyan);
+            color: var(--accent-cyan);
+            box-shadow: inset 0 0 8px rgba(0, 229, 255, 0.25);
+        }
+
+        
+        .btn.active-3d {
+            background: rgba(0, 229, 255, 0.22);
+            border-color: var(--accent-cyan);
+            color: var(--accent-cyan);
+            box-shadow: 0 0 10px rgba(0, 229, 255, 0.35);
+        }
+
+        .btn.active-bot {
+            background: rgba(192, 132, 252, 0.25);
+            border-color: var(--accent-purple);
+            color: var(--accent-purple);
+            box-shadow: 0 0 10px rgba(192, 132, 252, 0.35);
+        }
+
+        .crypto-subtab {
+            background: #101826;
+            color: var(--text-dim);
+            border: 1px solid #1e293b;
+            padding: 5px 8px;
+            border-radius: 4px;
+            font-size: 10.5px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .crypto-subtab.active {
+            background: rgba(0, 229, 255, 0.16);
+            color: var(--accent-cyan);
+            border-color: var(--accent-cyan);
+        }
+
+        .btn.active-race {
+            background: rgba(192, 132, 252, 0.2);
+            border-color: var(--accent-purple);
+            color: var(--accent-purple);
+        }
+
+        .btn.primary {
+            background: #00b38f;
+            border-color: var(--accent-neon);
+            color: #02120e;
+            font-weight: 700;
+        }
+
+        .btn.primary:hover {
+            background: var(--accent-neon);
+        }
+
+        .btn.danger:hover {
+            border-color: var(--accent-danger);
+            color: var(--accent-danger);
+        }
+
+        .slider-row {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+
+        .slider-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: var(--text-dim);
+        }
+
+        .slider-label b {
+            color: var(--text-main);
+            font-family: 'Consolas', monospace;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            height: 4px;
+            accent-color: var(--accent-cyan);
+            cursor: pointer;
+        }
+
+        select {
+            background: #101826;
+            color: var(--text-main);
+            border: 1px solid #22324a;
+            padding: 6px 8px;
+            border-radius: 4px;
+            font-size: 11.5px;
+            outline: none;
+            cursor: pointer;
+            width: 100%;
+        }
+
+        select:focus {
+            border-color: var(--accent-cyan);
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        /* PROFILER */
+        .telemetry-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+        }
+
+        .metric-card {
+            background: #090e18;
+            border: 1px solid #152136;
+            padding: 5px 8px;
+            border-radius: 4px;
+        }
+
+        .metric-card small {
+            display: block;
+            font-size: 9px;
+            color: var(--text-dim);
+            text-transform: uppercase;
+        }
+
+        .metric-card strong {
+            font-size: 12.5px;
+            font-family: 'Consolas', monospace;
+            color: var(--text-main);
+        }
+
+        #profilerCanvas {
+            width: 100%;
+            height: 48px;
+            background: #04060a;
+            border: 1px solid #162234;
+            border-radius: 4px;
+            display: block;
+        }
+    </style>
+
+    <!-- MODO SIMULACIÓN PURA PARA DIAPOSITIVAS (CERO MENÚS, CERO PANELES, CERO TEXTO) -->
+    <script>
+        (function() {
+            function activateClean() {
+                var isClean = window.location.search.indexOf('clean') !== -1 ||
+                              window.location.hash.indexOf('clean') !== -1 ||
+                              window.name.indexOf('clean') !== -1 ||
+                              (window.self !== window.top && window.name !== 'launcher-frame');
+                if (isClean) {
+                    document.documentElement.classList.add('pure-simulation-mode');
+                    if (document.body) document.body.classList.add('pure-simulation-mode');
+                }
+            }
+            activateClean();
+            window.addEventListener('DOMContentLoaded', activateClean);
+        })();
+    </script>
+    <style>
+        html.pure-simulation-mode,
+        html.pure-simulation-mode body {
+            width: 100vw !important;
+            height: 100vh !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: hidden !important;
+            background: #050811 !important;
+        }
+
+        html.pure-simulation-mode aside,
+        html.pure-simulation-mode header,
+        html.pure-simulation-mode .inspector,
+        html.pure-simulation-mode .sidebar,
+        html.pure-simulation-mode .hud-top-bar,
+        html.pure-simulation-mode .hud-bottom-bar,
+        html.pure-simulation-mode .race-banner-container,
+        html.pure-simulation-mode .controls-legend,
+        html.pure-simulation-mode .hud-chip,
+        html.pure-simulation-mode .engine-brand,
+        html.pure-simulation-mode .panel-section {
+            display: none !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+            max-width: 0 !important;
+            max-height: 0 !important;
+            width: 0 !important;
+            height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            border: none !important;
+        }
+
+        html.pure-simulation-mode .viewport,
+        html.pure-simulation-mode .app-container {
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            flex: none !important;
+            border: none !important;
+            overflow: hidden !important;
+        }
+
+        html.pure-simulation-mode canvas,
+        html.pure-simulation-mode #algoCanvas {
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            display: block !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+    </style>
+
+</head>
+
+<body>
+
+    <!-- VIEWPORT PRINCIPAL -->
+    <main class="viewport" id="viewport">
+        <canvas id="algoCanvas"></canvas>
+
+        <!-- HUD SUPERIOR -->
+        <div class="hud-top-bar">
+            <div class="hud-group">
+                <div class="hud-chip">DOMINIO: <span id="hudDomain">ORDENAMIENTO DE MEMORIA (RAM)</span></div>
+                <div class="hud-chip">VISTA: <span id="hudViewMode">CARRERA SPLIT-SCREEN (VS)</span></div>
+                <div class="hud-chip">HILO: <span style="color:var(--accent-neon);">DESACOPLADO 120 FPS</span></div>
+                <div class="hud-chip">DSP AUDIO: <span id="hudAudio">SINTETIZADOR ACTIVO</span></div>
+            </div>
+            <div class="hud-group">
+                <div class="hud-chip">COMPLEJIDAD A: <span id="hudCompA">O(N log N)</span></div>
+                <div class="hud-chip" id="hudChipCompB">COMPLEJIDAD B: <span id="hudCompB">O(N²)</span></div>
+            </div>
+        </div>
+
+        <!-- OVERLAY DE TELEMETRÍA EN VIVO PARA CARRERAS A vs B -->
+        <div class="race-banner-container">
+            <div class="engine-overlay-card" id="cardEngineA">
+                <span style="color:#00ff9d; font-weight:700;" id="titleA">MOTOR A: QuickSort</span>
+                <span>Operaciones: <b id="opsA">0</b></span>
+                <span>Accesos/Nodos: <b id="auxA">0</b></span>
+                <span id="badgeA" class="badge-win hidden">¡GANADOR #1!</span>
+            </div>
+
+            <div class="engine-overlay-card card-b" id="cardEngineB">
+                <span style="color:#c084fc; font-weight:700;" id="titleB">MOTOR B: BubbleSort</span>
+                <span>Operaciones: <b id="opsB">0</b></span>
+                <span>Accesos/Nodos: <b id="auxB">0</b></span>
+                <span id="badgeB" class="badge-win hidden">¡GANADOR #1!</span>
+            </div>
+        </div>
+
+        <!-- LEYENDA INFERIOR -->
+        <div class="hud-bottom-bar">
+            <div class="controls-legend" id="legendBar">
+                <span><b>Cian:</b> Lectura / Frontera</span>
+                <span><b>Rojo/Magenta:</b> Comparación Activa</span>
+                <span><b>Verde Esmeralda:</b> Ordenado / Ruta Óptima</span>
+                <span><b>Espacio:</b> Iniciar / Pausar</span>
+                <span><b>Tecla S:</b> Paso a Paso</span>
+            </div>
+        </div>
+    </main>
+
+    <!-- INSPECTOR LATERAL -->
+    <aside class="inspector">
+        <div class="engine-brand">
+            <h1>ALGO-ENGINE // DUAL</h1>
+            <span class="engine-version">v3.0 AAA</span>
+        </div>
+
+        <!-- SECCIÓN 1: SELECTOR DE MODO PRINCIPAL Y PANTALLA DIVIDIDA -->
+        <div class="panel-section">
+            <div class="section-title"><span>Arquitectura & Modo Carrera</span></div>
+            <div class="btn-grid-2" style="margin-bottom:5px;">
+                <button class="btn domain-btn active-tab" data-domain="sort">1. Ordenamiento</button>
+                <button class="btn domain-btn" data-domain="path">2. Rutas / Laberinto</button>
+            </div>
+            <div class="btn-grid-2" style="margin-bottom:6px;">
+                <button class="btn domain-btn" data-domain="huffman">3. Compresión Huffman</button>
+                <button class="btn domain-btn" data-domain="crypto">4. Criptografía RSA & ECC</button>
+            </div>
+            <button id="btnToggleRace" class="btn active-race">⚔ Modo Carrera (Pantalla Dividida: ON)</button>
+        </div>
+
+        <!-- SECCIÓN 2: ALGORITMOS ENFRENTADOS -->
+        <div class="panel-section">
+            <div class="section-title"><span>Selección de Algoritmos</span></div>
+            <div class="slider-row">
+                <div class="slider-label"><span style="color:#00ff9d;">● Algoritmo Motor A (Superior / Principal)</span>
+                </div>
+                <select id="selectAlgoA"></select>
+            </div>
+            <div class="slider-row" id="rowAlgoB">
+                <div class="slider-label"><span style="color:#c084fc;">● Algoritmo Motor B (Inferior - Rival)</span>
+                </div>
+                <select id="selectAlgoB"></select>
+            </div>
+        </div>
+
+        <!-- SECCIÓN 3: CONTROLES DE EJECUCIÓN Y PARÁMETROS -->
+        <div class="panel-section">
+            <div class="section-title">
+                <span>Reloj de Ejecución</span>
+                <span id="statusTag" style="color:#fbbf24;">● LISTO</span>
+            </div>
+            <div class="btn-row">
+                <button id="btnRun" class="btn primary">Iniciar / Pausar</button>
+                <button id="btnStep" class="btn">Paso (+1)</button>
+                <button id="btnReset" class="btn danger">Reiniciar</button>
+            </div>
+
+            <div class="slider-row">
+                <div class="slider-label"><span>Velocidad de Cómputo</span><b id="valSpeed">25 ops/frame</b></div>
+                <input type="range" id="rangeSpeed" min="1" max="120" value="25">
+            </div>
+
+            <!-- Controles exclusivos de Ordenamiento -->
+            <div id="sortControls" class="slider-row">
+                <div class="slider-label"><span>Tamaño del Vector (Barras)</span><b id="valArraySize">120</b></div>
+                <input type="range" id="rangeArraySize" min="20" max="500" step="10" value="120">
+                <div class="btn-grid-2" style="margin-top:4px;">
+                    <button id="btnShuffle" class="btn">Desorden Aleatorio</button>
+                    <button id="btnReversed" class="btn">Orden Inverso (Peor Caso)</button>
+                </div>
+            </div>
+
+            <!-- Controles exclusivos de Rutas y Laberintos -->
+            <div id="pathControls" class="slider-row hidden">
+                <div class="slider-label">
+                    <span>Tamaño del Mapa (Laberinto)</span>
+                    <b id="valGridDimensions" style="color:var(--accent-cyan);">59 × 23 (Estándar)</b>
+                </div>
+                <input type="range" id="rangeGridDimensions" min="1" max="5" value="2" step="1">
+
+                <div class="btn-grid-4" style="margin-top:3px;">
+                    <button class="btn grid-size-btn" data-level="1">37×15</button>
+                    <button class="btn grid-size-btn active-tab" data-level="2">59×23</button>
+                    <button class="btn grid-size-btn" data-level="3">87×33</button>
+                    <button class="btn grid-size-btn" data-level="5">145×53</button>
+                </div>
+
+                <div class="slider-label" style="margin-top:6px;"><span>Pincel de Escenario (Clic + Arrastrar):</span></div>
+                <div class="btn-grid-2">
+                    <button class="btn brush-btn active-tab" data-brush="wall">Dibujar Muro</button>
+                    <button class="btn brush-btn" data-brush="weight">Lodo Pesado (x5)</button>
+                </div>
+                <div class="btn-grid-2" style="margin-top:4px;">
+                    <button id="btnGenMaze" class="btn">Laberinto Recursivo</button>
+                    <button id="btnClearWalls" class="btn danger">Limpiar Mapa</button>
+                </div>
+
+                <div class="slider-label" style="margin-top:7px;"><span>Inmersión en Primera Persona (3D):</span></div>
+                <div class="btn-grid-2">
+                    <button id="btnToggle3D" class="btn">🎮 Vista 3D (Wolfenstein)</button>
+                    <button id="btnAutoPilot3D" class="btn">🤖 Bot Autónomo</button>
+                </div>
+            </div>
+
+            <!-- Controles exclusivos de Compresión de Huffman -->
+            <div id="huffmanControls" class="slider-row hidden">
+                <div class="slider-label"><span>Texto a Comprimir (Entropía):</span></div>
+                <input type="text" id="inputHuffmanText" value="NEURAL_NETWORK_QUANTUM_BRAIN_AI" style="background:#101826; border:1px solid #22324a; color:#f1f5f9; padding:5px 8px; border-radius:4px; font-size:11px; font-family:'Consolas',monospace; width:100%;">
+                <div class="btn-grid-2" style="margin-top:4px;">
+                    <button id="btnHuffmanBuild" class="btn primary">Generar Árbol</button>
+                    <button id="btnHuffmanPreset" class="btn">Frase Alterna</button>
+                </div>
+                <div class="slider-label" style="margin-top:5px;">
+                    <span>Ahorro de Espacio:</span>
+                    <b id="valHuffmanRatio" style="color:var(--accent-neon);">-- %</b>
+                </div>
+                <div class="slider-label" style="margin-top:2px; font-size:10px;">
+                    <span>Bits ASCII: <b id="valHuffmanAsciiBits">0</b> | Bits Huffman: <b id="valHuffmanTreeBits">0</b></span>
+                </div>
+            </div>
+
+            <!-- Controles exclusivos de Criptografía RSA & ECC -->
+            <div id="cryptoControls" class="slider-row hidden">
+                <div class="btn-grid-2" style="margin-bottom:6px;">
+                    <button id="btnCryptoTabRSA" class="crypto-subtab active">Cifrado RSA (Asimétrico)</button>
+                    <button id="btnCryptoTabECC" class="crypto-subtab">Curvas Elípticas (ECC)</button>
+                </div>
+                <div id="cryptoRSAPanel">
+                    <div class="slider-label"><span>Mensaje en Texto Plano:</span></div>
+                    <input type="text" id="inputRSAMsg" value="CIPHER2026" style="background:#101826; border:1px solid #22324a; color:#f1f5f9; padding:5px 8px; border-radius:4px; font-size:11px; font-family:'Consolas',monospace; width:100%;">
+                    <div class="btn-grid-2" style="margin-top:4px;">
+                        <button id="btnRSAEncrypt" class="btn primary">Cifrar (c = mᵉ mod n)</button>
+                        <button id="btnRSADecrypt" class="btn">Descifrar (cᵈ mod n)</button>
+                    </div>
+                    <div class="slider-label" style="margin-top:5px; font-size:10px;">
+                        <span>Claves: p=61, q=53 | n=3233, e=17, d=2753</span>
+                    </div>
+                </div>
+                <div id="cryptoECCPanel" class="hidden">
+                    <div class="slider-label"><span>Ecuación: y² = x³ - 3x + 3</span></div>
+                    <div class="slider-row" style="margin-top:3px;">
+                        <div class="slider-label"><span>Posición Punto P (x):</span><b id="valECCPointP">-1.80</b></div>
+                        <input type="range" id="rangeECCPointP" min="-2.0" max="2.3" step="0.05" value="-1.80">
+                    </div>
+                    <div class="btn-grid-2" style="margin-top:4px;">
+                        <button id="btnECCAdd" class="btn primary">Sumar P + Q = R</button>
+                        <button id="btnECCDouble" class="btn">Duplicar 2P</button>
+                    </div>
+                    <div class="slider-label" style="margin-top:5px; font-size:10px;">
+                        <span>Geometría Secante y Reflexión (ECDSA / TLS)</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SECCIÓN 4: SINTETIZADOR DE ONDAS PURAS (WEB AUDIO DSP) -->
+        <div class="panel-section">
+            <div class="section-title">
+                <span>Sintetizador DSP de Ondas Puras</span>
+                <span id="freqMonitor" style="color:#00e5ff;">440 Hz</span>
+            </div>
+            <div class="btn-row">
+                <button id="btnMute" class="btn active-tab">🔊 Audio: ENCENDIDO</button>
+                <select id="selectWave" style="flex:1;">
+                    <option value="triangle">Onda: Triangle (Suave)</option>
+                    <option value="sine">Onda: Sine (Pura)</option>
+                    <option value="sawtooth">Onda: Sawtooth (Retro)</option>
+                </select>
+            </div>
+            <div class="slider-row">
+                <div class="slider-label"><span>Ganancia Master (Volumen)</span><b id="valVol">35%</b></div>
+                <input type="range" id="rangeVol" min="0" max="100" value="35">
+            </div>
+        </div>
+
+        <!-- SECCIÓN 5: PROFILER HARDWARE -->
+        <div class="panel-section" style="margin-top:auto;">
+            <div class="section-title">
+                <span>Hardware Profiler</span>
+                <span id="fpsCounter" style="color:#00ff9d;">60 FPS</span>
+            </div>
+            <div class="telemetry-grid">
+                <div class="metric-card">
+                    <small>Operaciones / Seg</small>
+                    <strong id="metricOpsSec">0 ops/s</strong>
+                </div>
+                <div class="metric-card">
+                    <small>Latencia Render</small>
+                    <strong id="metricRenderMs">0.20 ms</strong>
+                </div>
+            </div>
+            <canvas id="profilerCanvas" width="295" height="48"></canvas>
+        </div>
+    </aside>
+
+    <script>
+        /**
+         * ============================================================================
+         * ALGO-ENGINE AAA v3.0 - COROUTINE GENERATOR ARCHITECTURE & DSP SYNTH
+         * ============================================================================
+         * 1. Sintetizador Web Audio API de latencia cero con envolvente ADSR exponencial.
+         * 2. Algoritmos de Ordenamiento (QuickSort, MergeSort, HeapSort, RadixSort, BubbleSort)
+         *    basados en generadores (function*) para sincronización perfecta en Modo Carrera.
+         * 3. Algoritmos de Grafos y Navegación (A*, Dijkstra, Greedy Best-First, BFS) con
+         *    Min-Heap binario y generador de laberintos Recursive Backtracker.
+         */
+
+        // ============================================================================
+        // 1. MOTOR DE SÍNTESIS DE AUDIO DE ONDAS PURAS (WEB AUDIO API)
+        // ============================================================================
+        class PureWaveSynthesizer {
+            constructor() {
+                this.ctx = null;
+                this.enabled = true;
+                this.volume = 0.35;
+                this.waveType = 'triangle';
+                this.lastNoteTime = 0;
+                this.currentFreq = 440;
+            }
+
+            initContext() {
+                if (!this.ctx) {
+                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                    this.ctx = new AudioCtx();
+                }
+                if (this.ctx && this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+            }
+
+            /**
+             * Dispara un pulso tonal puro mapeado entre 140 Hz y 920 Hz
+             * @param {number} normalizedVal Valor entre 0.0 y 1.0
+             * @param {number} pan -0.5 para Motor A (izq), +0.5 para Motor B (der)
+             */
+            playTone(normalizedVal, pan = 0) {
+                if (!this.enabled) return;
+                const nowMs = performance.now();
+                // Limitar densidad de disparo a máx 1 nota cada 18ms para sonido cristalino
+                if (nowMs - this.lastNoteTime < 18) return;
+                this.lastNoteTime = nowMs;
+
+                this.initContext();
+                if (!this.ctx) return;
+
+                const now = this.ctx.currentTime;
+                const freq = Math.round(140 + Math.max(0, Math.min(1, normalizedVal)) * 780);
+                this.currentFreq = freq;
+
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+
+                osc.type = this.waveType;
+                osc.frequency.setValueAtTime(freq, now);
+
+                // Envolvente percusiva suave sin clics de audio
+                const peakGain = Math.max(0.001, this.volume * 0.18);
+                gain.gain.setValueAtTime(0.0001, now);
+                gain.gain.linearRampToValueAtTime(peakGain, now + 0.006);
+                gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.065);
+
+                if (this.ctx.createStereoPanner) {
+                    const panner = this.ctx.createStereoPanner();
+                    panner.pan.setValueAtTime(pan, now);
+                    osc.connect(gain);
+                    gain.connect(panner);
+                    panner.connect(this.ctx.destination);
+                } else {
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                }
+
+                osc.start(now);
+                osc.stop(now + 0.07);
+            }
+        }
+
+        // ============================================================================
+        // 2. CATÁLOGO Y CORRUTINAS DE ALGORITMOS DE ORDENAMIENTO
+        // ============================================================================
+        const SORT_CATALOG = {
+            timsort: { name: 'TimSort (Híbrido V8 / Python)', complexity: 'O(N log N)' },
+            quicksort: { name: 'QuickSort (Hoare/Lomuto)', complexity: 'O(N log N)' },
+            mergesort: { name: 'MergeSort (Divide & Conquer)', complexity: 'O(N log N)' },
+            heapsort: { name: 'HeapSort (Binary Max-Heap)', complexity: 'O(N log N)' },
+            radixsort: { name: 'RadixSort LSD (No Comparativo)', complexity: 'O(d · N)' },
+            bubblesort: { name: 'BubbleSort (Fuerza Bruta)', complexity: 'O(N²)' }
+        };
+
+        const PATH_CATALOG = {
+            biastar: { name: 'Bidirectional A* (Origen & Meta)', complexity: 'O(b^(d/2))' },
+            astar: { name: 'A* Search (Heurística Manhattan)', complexity: 'O(E log V)' },
+            jps: { name: 'JPS (Jump Point Search A*)', complexity: 'O(E log V) [10x A*]' },
+            rrt: { name: 'RRT (Rapidly-exploring Random Tree)', complexity: 'O(K log K) [Robótica]' },
+            dijkstra: { name: 'Algoritmo de Dijkstra (Pesos)', complexity: 'O(E + V log V)' },
+            greedy: { name: 'Greedy Best-First (Voraz)', complexity: 'O(E log V)' },
+            bfs: { name: 'Breadth-First Search (Sin Pesos)', complexity: 'O(V + E)' }
+        };
+
+        function* timSortGen(state) {
+            const arr = state.arr;
+            const n = arr.length;
+            const RUN = 32;
+
+            // 1. Insertion Sort en bloques RUN
+            for (let i = 0; i < n; i += RUN) {
+                const end = Math.min(i + RUN - 1, n - 1);
+                for (let j = i + 1; j <= end; j++) {
+                    const temp = arr[j];
+                    let k = j - 1;
+                    state.accesses++;
+                    state.activeB = j;
+                    while (k >= i && arr[k] > temp) {
+                        state.ops++;
+                        state.accesses += 2;
+                        arr[k + 1] = arr[k];
+                        state.activeA = k;
+                        state.soundNorm = arr[k];
+                        k--;
+                        yield;
+                    }
+                    arr[k + 1] = temp;
+                    state.accesses++;
+                    yield;
+                }
+            }
+
+            // 2. Fusión de bloques (Merge Runs)
+            const aux = new Float32Array(n);
+            for (let size = RUN; size < n; size = 2 * size) {
+                for (let left = 0; left < n; left += 2 * size) {
+                    const mid = left + size - 1;
+                    const right = Math.min(left + 2 * size - 1, n - 1);
+                    if (mid < right) {
+                        for (let k = left; k <= right; k++) {
+                            aux[k] = arr[k];
+                            state.accesses++;
+                        }
+                        let p = left, q = mid + 1;
+                        for (let k = left; k <= right; k++) {
+                            state.ops++;
+                            state.activeA = p <= mid ? p : mid;
+                            state.activeB = q <= right ? q : right;
+                            if (p > mid) {
+                                arr[k] = aux[q++];
+                            } else if (q > right) {
+                                arr[k] = aux[p++];
+                            } else if (aux[q] < aux[p]) {
+                                arr[k] = aux[q++];
+                            } else {
+                                arr[k] = aux[p++];
+                            }
+                            state.accesses += 2;
+                            state.soundNorm = arr[k];
+                            yield;
+                        }
+                    }
+                }
+            }
+            yield* SweepCompleted(state);
+        }
+
+        function* quickSortGen(state) {
+            const arr = state.arr;
+            function* partition(low, high) {
+                const pivot = arr[high];
+                state.pivotIdx = high;
+                let i = low - 1;
+                for (let j = low; j < high; j++) {
+                    state.activeA = j;
+                    state.activeB = high;
+                    state.ops++;
+                    state.accesses += 2;
+                    state.soundNorm = arr[j];
+                    yield;
+                    if (arr[j] < pivot) {
+                        i++;
+                        const tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
+                        state.accesses += 2;
+                        state.activeA = i;
+                        state.activeB = j;
+                        yield;
+                    }
+                }
+                const tmp = arr[i + 1]; arr[i + 1] = arr[high]; arr[high] = tmp;
+                state.accesses += 2;
+                state.pivotIdx = -1;
+                return i + 1;
+            }
+
+            function* sort(low, high) {
+                if (low < high) {
+                    const pi = yield* partition(low, high);
+                    state.sortedMask[pi] = 1;
+                    yield* sort(low, pi - 1);
+                    yield* sort(pi + 1, high);
+                } else if (low >= 0 && low < arr.length) {
+                    state.sortedMask[low] = 1;
+                }
+            }
+
+            yield* sort(0, arr.length - 1);
+            yield* SweepCompleted(state);
+        }
+
+        function* mergeSortGen(state) {
+            const arr = state.arr;
+            const aux = new Float32Array(arr.length);
+
+            function* merge(left, mid, right) {
+                for (let k = left; k <= right; k++) {
+                    aux[k] = arr[k];
+                    state.accesses++;
+                }
+                let i = left, j = mid + 1;
+                for (let k = left; k <= right; k++) {
+                    state.ops++;
+                    state.activeA = i <= mid ? i : mid;
+                    state.activeB = j <= right ? j : right;
+                    if (i > mid) {
+                        arr[k] = aux[j++];
+                    } else if (j > right) {
+                        arr[k] = aux[i++];
+                    } else if (aux[j] < aux[i]) {
+                        arr[k] = aux[j++];
+                    } else {
+                        arr[k] = aux[i++];
+                    }
+                    state.accesses += 2;
+                    state.soundNorm = arr[k];
+                    yield;
+                }
+            }
+
+            function* divide(left, right) {
+                if (left >= right) return;
+                const mid = (left + right) >> 1;
+                yield* divide(left, mid);
+                yield* divide(mid + 1, right);
+                yield* merge(left, mid, right);
+            }
+
+            yield* divide(0, arr.length - 1);
+            yield* SweepCompleted(state);
+        }
+
+        function* heapSortGen(state) {
+            const arr = state.arr;
+            const n = arr.length;
+
+            function* heapify(length, i) {
+                let largest = i;
+                const l = 2 * i + 1;
+                const r = 2 * i + 2;
+
+                if (l < length) {
+                    state.ops++; state.accesses += 2;
+                    if (arr[l] > arr[largest]) largest = l;
+                }
+                if (r < length) {
+                    state.ops++; state.accesses += 2;
+                    if (arr[r] > arr[largest]) largest = r;
+                }
+                if (largest !== i) {
+                    state.activeA = i;
+                    state.activeB = largest;
+                    const swap = arr[i]; arr[i] = arr[largest]; arr[largest] = swap;
+                    state.accesses += 2;
+                    state.soundNorm = arr[i];
+                    yield;
+                    yield* heapify(length, largest);
+                }
+            }
+
+            for (let i = (n >> 1) - 1; i >= 0; i--) {
+                yield* heapify(n, i);
+            }
+            for (let i = n - 1; i > 0; i--) {
+                const temp = arr[0]; arr[0] = arr[i]; arr[i] = temp;
+                state.sortedMask[i] = 1;
+                state.activeA = 0; state.activeB = i;
+                state.soundNorm = arr[i];
+                yield;
+                yield* heapify(i, 0);
+            }
+            yield* SweepCompleted(state);
+        }
+
+        function* radixSortGen(state) {
+            const arr = state.arr;
+            const n = arr.length;
+            const intArr = new Uint32Array(n);
+            for (let i = 0; i < n; i++) intArr[i] = Math.floor(arr[i] * 9999);
+
+            const output = new Uint32Array(n);
+            const floatOut = new Float32Array(n);
+
+            for (let exp = 1; Math.floor(9999 / exp) > 0; exp *= 10) {
+                const count = new Uint32Array(10);
+                for (let i = 0; i < n; i++) {
+                    const digit = Math.floor(intArr[i] / exp) % 10;
+                    count[digit]++;
+                    state.ops++;
+                    state.accesses++;
+                    state.activeA = i;
+                    state.soundNorm = arr[i];
+                    if (i % 2 === 0) yield;
+                }
+                for (let i = 1; i < 10; i++) count[i] += count[i - 1];
+
+                for (let i = n - 1; i >= 0; i--) {
+                    const digit = Math.floor(intArr[i] / exp) % 10;
+                    const pos = --count[digit];
+                    output[pos] = intArr[i];
+                    floatOut[pos] = arr[i];
+                    state.accesses += 2;
+                }
+                for (let i = 0; i < n; i++) {
+                    intArr[i] = output[i];
+                    arr[i] = floatOut[i];
+                    state.activeB = i;
+                    state.ops++;
+                    state.soundNorm = arr[i];
+                    yield;
+                }
+            }
+            yield* SweepCompleted(state);
+        }
+
+        function* bubbleSortGen(state) {
+            const arr = state.arr;
+            const n = arr.length;
+            for (let i = 0; i < n - 1; i++) {
+                let swapped = false;
+                for (let j = 0; j < n - i - 1; j++) {
+                    state.activeA = j;
+                    state.activeB = j + 1;
+                    state.ops++;
+                    state.accesses += 2;
+                    state.soundNorm = arr[j];
+                    yield;
+                    if (arr[j] > arr[j + 1]) {
+                        const tmp = arr[j]; arr[j] = arr[j + 1]; arr[j + 1] = tmp;
+                        state.accesses += 2;
+                        swapped = true;
+                    }
+                }
+                state.sortedMask[n - 1 - i] = 1;
+                if (!swapped) break;
+            }
+            yield* SweepCompleted(state);
+        }
+
+        function* SweepCompleted(state) {
+            state.activeA = -1;
+            state.activeB = -1;
+            state.pivotIdx = -1;
+            for (let i = 0; i < state.arr.length; i++) {
+                state.sortedMask[i] = 1;
+                state.activeA = i;
+                state.soundNorm = state.arr[i];
+                if (i % 3 === 0) yield;
+            }
+            state.activeA = -1;
+            state.finished = true;
+        }
+
+        // ============================================================================
+        // 3. ESTRUCTURA MIN-HEAP Y CORRUTINAS DE NAVEGACIÓN (A* / DIJKSTRA / BFS)
+        // ============================================================================
+        class MinHeap {
+            constructor() { this.data = []; }
+            push(item) {
+                this.data.push(item);
+                this.up(this.data.length - 1);
+            }
+            pop() {
+                if (this.data.length === 0) return null;
+                const top = this.data[0];
+                const bottom = this.data.pop();
+                if (this.data.length > 0) {
+                    this.data[0] = bottom;
+                    this.down(0);
+                }
+                return top;
+            }
+            up(i) {
+                while (i > 0) {
+                    const p = (i - 1) >> 1;
+                    if (this.data[i].f >= this.data[p].f) break;
+                    [this.data[i], this.data[p]] = [this.data[p], this.data[i]];
+                    i = p;
+                }
+            }
+            down(i) {
+                const len = this.data.length;
+                while ((i << 1) + 1 < len) {
+                    let left = (i << 1) + 1;
+                    let right = left + 1;
+                    let small = i;
+                    if (left < len && this.data[left].f < this.data[small].f) small = left;
+                    if (right < len && this.data[right].f < this.data[small].f) small = right;
+                    if (small === i) break;
+                    [this.data[i], this.data[small]] = [this.data[small], this.data[i]];
+                    i = small;
+                }
+            }
+            get size() { return this.data.length; }
+        }
+
+        function* pathSearchGen(state, sharedGrid, algoKey) {
+            const cols = sharedGrid.cols;
+            const rows = sharedGrid.rows;
+            const total = cols * rows;
+            const startIdx = sharedGrid.startY * cols + sharedGrid.startX;
+            const endIdx = sharedGrid.endY * cols + sharedGrid.endX;
+
+            const gScore = new Float32Array(total).fill(Infinity);
+            const parent = new Int32Array(total).fill(-1);
+            const openHeap = new MinHeap();
+
+            const heuristic = (idx) => {
+                const x = idx % cols;
+                const y = (idx / cols) | 0;
+                return Math.abs(x - sharedGrid.endX) + Math.abs(y - sharedGrid.endY);
+            };
+
+            gScore[startIdx] = 0;
+            openHeap.push({ idx: startIdx, f: heuristic(startIdx), tie: 0 });
+            state.cellVis[startIdx] = 1; // 1 = En Frontera
+
+            let tieBreaker = 0;
+            const dirs = [[0, -1], [1, 0], [0, 1], [-1, 0]];
+
+            while (openHeap.size > 0) {
+                const current = openHeap.pop();
+                const u = current.idx;
+
+                if (state.cellVis[u] === 2) continue;
+                state.cellVis[u] = 2; // 2 = Visitado
+                state.currentHead = u;
+                state.ops++;
+                state.visitedCount++;
+
+                // Tono proporcional a la cercanía a la meta
+                const maxDist = cols + rows;
+                state.soundNorm = 1.0 - Math.min(1, heuristic(u) / maxDist);
+                yield;
+
+                if (u === endIdx) {
+                    // Reconstruir el camino más corto
+                    let curr = endIdx;
+                    let totalCost = 0;
+                    const pathIndices = [];
+                    while (curr !== -1) {
+                        pathIndices.push(curr);
+                        if (curr !== startIdx) {
+                            totalCost += sharedGrid.terrain[curr] === 2 ? 5 : 1;
+                        }
+                        curr = parent[curr];
+                    }
+                    pathIndices.reverse();
+                    for (let k = 0; k < pathIndices.length; k++) {
+                        const pIdx = pathIndices[k];
+                        state.cellVis[pIdx] = 3; // 3 = Ruta Óptima
+                        state.soundNorm = 0.3 + (k / pathIndices.length) * 0.7;
+                        yield;
+                    }
+                    state.pathCost = totalCost;
+                    state.currentHead = -1;
+                    state.finished = true;
+                    return;
+                }
+
+                const ux = u % cols;
+                const uy = (u / cols) | 0;
+
+                for (let d = 0; d < 4; d++) {
+                    const nx = ux + dirs[d][0];
+                    const ny = uy + dirs[d][1];
+                    if (nx < 0 || nx >= cols || ny < 0 || ny >= rows) continue;
+
+                    const v = ny * cols + nx;
+                    if (sharedGrid.terrain[v] === 1 || state.cellVis[v] === 2) continue; // 1 = Muro
+
+                    const stepCost = (algoKey === 'bfs') ? 1 : (sharedGrid.terrain[v] === 2 ? 5 : 1);
+                    const tentativeG = gScore[u] + stepCost;
+
+                    if (tentativeG < gScore[v]) {
+                        parent[v] = u;
+                        gScore[v] = tentativeG;
+
+                        const h = heuristic(v);
+                        let fPriority = tentativeG;
+                        if (algoKey === 'astar') fPriority = tentativeG + h * 1.05;
+                        else if (algoKey === 'greedy') fPriority = h;
+                        else if (algoKey === 'bfs') fPriority = ++tieBreaker;
+
+                        state.cellVis[v] = 1;
+                        openHeap.push({ idx: v, f: fPriority });
+                    }
+                }
+            }
+
+            state.currentHead = -1;
+            state.finished = true;
+        }
+
+        function* biAStarGen(state, sharedGrid) {
+            const cols = sharedGrid.cols;
+            const rows = sharedGrid.rows;
+            const total = cols * rows;
+            const startIdx = sharedGrid.startY * cols + sharedGrid.startX;
+            const endIdx = sharedGrid.endY * cols + sharedGrid.endX;
+
+            const gForward = new Float32Array(total).fill(Infinity);
+            const gBackward = new Float32Array(total).fill(Infinity);
+            const parentForward = new Int32Array(total).fill(-1);
+            const parentBackward = new Int32Array(total).fill(-1);
+            const closedForward = new Uint8Array(total);
+            const closedBackward = new Uint8Array(total);
+
+            const openForward = new MinHeap();
+            const openBackward = new MinHeap();
+
+            const hForward = (idx) => {
+                const x = idx % cols, y = (idx / cols) | 0;
+                return Math.abs(x - sharedGrid.endX) + Math.abs(y - sharedGrid.endY);
+            };
+            const hBackward = (idx) => {
+                const x = idx % cols, y = (idx / cols) | 0;
+                return Math.abs(x - sharedGrid.startX) + Math.abs(y - sharedGrid.startY);
+            };
+
+            gForward[startIdx] = 0;
+            openForward.push({ idx: startIdx, f: hForward(startIdx) });
+            state.cellVis[startIdx] = 1;
+
+            gBackward[endIdx] = 0;
+            openBackward.push({ idx: endIdx, f: hBackward(endIdx) });
+            state.cellVis[endIdx] = 1;
+
+            const dirs = [[0, -1], [1, 0], [0, 1], [-1, 0]];
+            let meetingNode = -1;
+
+            while (openForward.size > 0 && openBackward.size > 0) {
+                // Paso Forward (Origen -> Meta)
+                const curF = openForward.pop();
+                const uF = curF.idx;
+                if (closedForward[uF] === 0) {
+                    closedForward[uF] = 1;
+                    state.cellVis[uF] = 2;
+                    state.currentHead = uF;
+                    state.ops++;
+                    state.visitedCount++;
+                    state.soundNorm = 1.0 - Math.min(1, hForward(uF) / (cols + rows));
+                    yield;
+
+                    if (closedBackward[uF] === 1) {
+                        meetingNode = uF;
+                        break;
+                    }
+
+                    const ux = uF % cols, uy = (uF / cols) | 0;
+                    for (let d = 0; d < 4; d++) {
+                        const nx = ux + dirs[d][0], ny = uy + dirs[d][1];
+                        if (nx < 0 || nx >= cols || ny < 0 || ny >= rows) continue;
+                        const v = ny * cols + nx;
+                        if (sharedGrid.terrain[v] === 1 || closedForward[v] === 1) continue;
+                        const stepCost = sharedGrid.terrain[v] === 2 ? 5 : 1;
+                        const tentG = gForward[uF] + stepCost;
+                        if (tentG < gForward[v]) {
+                            parentForward[v] = uF;
+                            gForward[v] = tentG;
+                            state.cellVis[v] = 1;
+                            openForward.push({ idx: v, f: tentG + hForward(v) * 1.05 });
+                            if (closedBackward[v] === 1) {
+                                meetingNode = v;
+                                break;
+                            }
+                        }
+                    }
+                    if (meetingNode !== -1) break;
+                }
+
+                // Paso Backward (Meta -> Origen)
+                const curB = openBackward.pop();
+                const uB = curB.idx;
+                if (closedBackward[uB] === 0) {
+                    closedBackward[uB] = 1;
+                    state.cellVis[uB] = 2;
+                    state.currentHead = uB;
+                    state.ops++;
+                    state.visitedCount++;
+                    state.soundNorm = 1.0 - Math.min(1, hBackward(uB) / (cols + rows));
+                    yield;
+
+                    if (closedForward[uB] === 1) {
+                        meetingNode = uB;
+                        break;
+                    }
+
+                    const ux = uB % cols, uy = (uB / cols) | 0;
+                    for (let d = 0; d < 4; d++) {
+                        const nx = ux + dirs[d][0], ny = uy + dirs[d][1];
+                        if (nx < 0 || nx >= cols || ny < 0 || ny >= rows) continue;
+                        const v = ny * cols + nx;
+                        if (sharedGrid.terrain[v] === 1 || closedBackward[v] === 1) continue;
+                        const stepCost = sharedGrid.terrain[v] === 2 ? 5 : 1;
+                        const tentG = gBackward[uB] + stepCost;
+                        if (tentG < gBackward[v]) {
+                            parentBackward[v] = uB;
+                            gBackward[v] = tentG;
+                            state.cellVis[v] = 1;
+                            openBackward.push({ idx: v, f: tentG + hBackward(v) * 1.05 });
+                            if (closedForward[v] === 1) {
+                                meetingNode = v;
+                                break;
+                            }
+                        }
+                    }
+                    if (meetingNode !== -1) break;
+                }
+            }
+
+            if (meetingNode !== -1) {
+                // Reconstruir camino combinando Forward y Backward
+                const pathForward = [];
+                let curr = meetingNode;
+                while (curr !== -1) {
+                    pathForward.push(curr);
+                    curr = parentForward[curr];
+                }
+                pathForward.reverse();
+
+                const pathBackward = [];
+                curr = parentBackward[meetingNode];
+                while (curr !== -1) {
+                    pathBackward.push(curr);
+                    curr = parentBackward[curr];
+                }
+
+                const fullPath = pathForward.concat(pathBackward);
+                let totalCost = 0;
+                for (let k = 0; k < fullPath.length; k++) {
+                    const pIdx = fullPath[k];
+                    state.cellVis[pIdx] = 3; // 3 = Ruta Óptima
+                    if (pIdx !== startIdx) totalCost += sharedGrid.terrain[pIdx] === 2 ? 5 : 1;
+                    state.soundNorm = 0.3 + (k / fullPath.length) * 0.7;
+                    yield;
+                }
+                state.pathCost = totalCost;
+                state.currentHead = -1;
+                state.finished = true;
+                return;
+            }
+
+            state.currentHead = -1;
+            state.finished = true;
+        }
+
+        // ============================================================================
+        // 3.1 ALGORITMO JPS (JUMP POINT SEARCH) - ACELERACIÓN 10x SOBRE REJILLAS
+        // ============================================================================
+        function* jpsGen(state, sharedGrid) {
+            const cols = sharedGrid.cols;
+            const rows = sharedGrid.rows;
+            const total = cols * rows;
+            const startX = sharedGrid.startX;
+            const startY = sharedGrid.startY;
+            const endX = sharedGrid.endX;
+            const endY = sharedGrid.endY;
+            const startIdx = startY * cols + startX;
+            const endIdx = endY * cols + endX;
+            const terrain = sharedGrid.terrain;
+
+            const isWalkable = (x, y) => {
+                if (x < 0 || x >= cols || y < 0 || y >= rows) return false;
+                return terrain[y * cols + x] !== 1;
+            };
+
+            const gScore = new Float32Array(total).fill(Infinity);
+            const parent = new Int32Array(total).fill(-1);
+            const openHeap = new MinHeap();
+
+            const heuristic = (x, y) => Math.hypot(x - endX, y - endY);
+
+            gScore[startIdx] = 0;
+            openHeap.push({ idx: startIdx, x: startX, y: startY, f: heuristic(startX, startY) });
+            state.cellVis[startIdx] = 1;
+
+            const jump = (cx, cy, dx, dy) => {
+                const nx = cx + dx;
+                const ny = cy + dy;
+                if (!isWalkable(nx, ny)) return null;
+
+                const nIdx = ny * cols + nx;
+                if (state.cellVis[nIdx] === 0) state.cellVis[nIdx] = 1;
+
+                if (nx === endX && ny === endY) return [nx, ny];
+
+                // Detección de vecinos forzados
+                if (dx !== 0 && dy !== 0) { // Diagonal
+                    if ((isWalkable(nx - dx, ny + dy) && !isWalkable(nx - dx, ny)) ||
+                        (isWalkable(nx + dx, ny - dy) && !isWalkable(nx, ny - dy))) {
+                        return [nx, ny];
+                    }
+                    if (jump(nx, ny, dx, 0) !== null || jump(nx, ny, 0, dy) !== null) {
+                        return [nx, ny];
+                    }
+                } else if (dx !== 0) { // Horizontal
+                    if ((isWalkable(nx + dx, ny + 1) && !isWalkable(nx, ny + 1)) ||
+                        (isWalkable(nx + dx, ny - 1) && !isWalkable(nx, ny - 1))) {
+                        return [nx, ny];
+                    }
+                } else if (dy !== 0) { // Vertical
+                    if ((isWalkable(nx + 1, ny + dy) && !isWalkable(nx + 1, ny)) ||
+                        (isWalkable(nx - 1, ny + dy) && !isWalkable(nx - 1, ny))) {
+                        return [nx, ny];
+                    }
+                }
+
+                return jump(nx, ny, dx, dy);
+            };
+
+            const dirs = [
+                [0, -1], [1, 0], [0, 1], [-1, 0],
+                [1, -1], [1, 1], [-1, 1], [-1, -1]
+            ];
+
+            while (openHeap.size > 0) {
+                const cur = openHeap.pop();
+                const uIdx = cur.idx;
+                const ux = cur.x;
+                const uy = cur.y;
+
+                if (state.cellVis[uIdx] === 2 && uIdx !== startIdx) continue;
+                state.cellVis[uIdx] = 2;
+                state.currentHead = uIdx;
+                state.ops++;
+                state.visitedCount++;
+                state.soundNorm = 1.0 - Math.min(1, heuristic(ux, uy) / (cols + rows));
+                yield;
+
+                if (ux === endX && uy === endY) {
+                    let curr = endIdx;
+                    let totalCost = 0;
+                    const pathIndices = [];
+                    while (curr !== -1) {
+                        pathIndices.push(curr);
+                        const p = parent[curr];
+                        if (p !== -1) {
+                            const px0 = curr % cols, py0 = (curr / cols) | 0;
+                            const px1 = p % cols, py1 = (p / cols) | 0;
+                            const ddx = Math.sign(px1 - px0);
+                            const ddy = Math.sign(py1 - py0);
+                            let ix = px0 + ddx, iy = py0 + ddy;
+                            while (ix !== px1 || iy !== py1) {
+                                pathIndices.push(iy * cols + ix);
+                                ix += ddx;
+                                iy += ddy;
+                            }
+                        }
+                        curr = p;
+                    }
+                    pathIndices.reverse();
+                    for (let k = 0; k < pathIndices.length; k++) {
+                        const idx = pathIndices[k];
+                        state.cellVis[idx] = 3;
+                        totalCost += terrain[idx] === 2 ? 5 : 1;
+                        state.soundNorm = 0.3 + (k / pathIndices.length) * 0.7;
+                        if (k % 2 === 0) yield;
+                    }
+                    state.pathCost = totalCost;
+                    state.currentHead = -1;
+                    state.finished = true;
+                    return;
+                }
+
+                for (let d = 0; d < 8; d++) {
+                    const jp = jump(ux, uy, dirs[d][0], dirs[d][1]);
+                    if (jp) {
+                        const jx = jp[0];
+                        const jy = jp[1];
+                        const jIdx = jy * cols + jx;
+                        const dist = Math.hypot(jx - ux, jy - uy);
+                        const stepCost = dist * (terrain[jIdx] === 2 ? 5 : 1);
+                        const tentG = gScore[uIdx] + stepCost;
+
+                        if (tentG < gScore[jIdx]) {
+                            parent[jIdx] = uIdx;
+                            gScore[jIdx] = tentG;
+                            state.cellVis[jIdx] = 1;
+                            openHeap.push({
+                                idx: jIdx,
+                                x: jx,
+                                y: jy,
+                                f: tentG + heuristic(jx, jy) * 1.05
+                            });
+                        }
+                    }
+                }
+            }
+
+            state.currentHead = -1;
+            state.finished = true;
+        }
+
+        // ============================================================================
+        // 3.2 ALGORITMO RRT (RAPIDLY-EXPLORING RANDOM TREE) - PLANIFICACIÓN ROBÓTICA
+        // ============================================================================
+        function* rrtGen(state, sharedGrid) {
+            const cols = sharedGrid.cols;
+            const rows = sharedGrid.rows;
+            const startX = sharedGrid.startX;
+            const startY = sharedGrid.startY;
+            const endX = sharedGrid.endX;
+            const endY = sharedGrid.endY;
+            const startIdx = startY * cols + startX;
+            const terrain = sharedGrid.terrain;
+
+            const isWalkable = (x, y) => {
+                const ix = Math.floor(x), iy = Math.floor(y);
+                if (ix < 0 || ix >= cols || iy < 0 || iy >= rows) return false;
+                return terrain[iy * cols + ix] !== 1;
+            };
+
+            const lineFree = (x0, y0, x1, y1) => {
+                const dist = Math.hypot(x1 - x0, y1 - y0);
+                const steps = Math.ceil(dist * 2.5);
+                for (let s = 0; s <= steps; s++) {
+                    const t = s / steps;
+                    const x = x0 + (x1 - x0) * t;
+                    const y = y0 + (y1 - y0) * t;
+                    if (!isWalkable(x, y)) return false;
+                }
+                return true;
+            };
+
+            const tree = [{ x: startX, y: startY, parent: -1, idx: startIdx, cost: 0 }];
+            state.cellVis[startIdx] = 2;
+
+            const maxIterations = 2800;
+            const stepSize = 2.4;
+            let reachedNode = -1;
+
+            for (let iter = 0; iter < maxIterations; iter++) {
+                let sampleX, sampleY;
+                if (Math.random() < 0.20) {
+                    sampleX = endX;
+                    sampleY = endY;
+                } else {
+                    sampleX = Math.random() * cols;
+                    sampleY = Math.random() * rows;
+                }
+
+                let nearestIdx = 0;
+                let minDist = Infinity;
+                for (let i = 0; i < tree.length; i++) {
+                    const d = Math.hypot(tree[i].x - sampleX, tree[i].y - sampleY);
+                    if (d < minDist) {
+                        minDist = d;
+                        nearestIdx = i;
+                    }
+                }
+
+                const near = tree[nearestIdx];
+                const angle = Math.atan2(sampleY - near.y, sampleX - near.x);
+                const distToSample = Math.hypot(sampleX - near.x, sampleY - near.y);
+                const actualStep = Math.min(stepSize, distToSample);
+                const newX = near.x + Math.cos(angle) * actualStep;
+                const newY = near.y + Math.sin(angle) * actualStep;
+
+                if (lineFree(near.x, near.y, newX, newY)) {
+                    const cellX = Math.floor(newX);
+                    const cellY = Math.floor(newY);
+                    const cIdx = cellY * cols + cellX;
+                    const newCost = near.cost + actualStep * (terrain[cIdx] === 2 ? 5 : 1);
+
+                    const newNodeId = tree.length;
+                    tree.push({ x: newX, y: newY, parent: nearestIdx, idx: cIdx, cost: newCost });
+
+                    const segDist = Math.hypot(newX - near.x, newY - near.y);
+                    const steps = Math.ceil(segDist * 2);
+                    for (let s = 1; s <= steps; s++) {
+                        const t = s / steps;
+                        const lx = Math.floor(near.x + (newX - near.x) * t);
+                        const ly = Math.floor(near.y + (newY - near.y) * t);
+                        if (lx >= 0 && lx < cols && ly >= 0 && ly < rows) {
+                            const lIdx = ly * cols + lx;
+                            if (state.cellVis[lIdx] === 0) state.cellVis[lIdx] = 1;
+                        }
+                    }
+                    state.cellVis[cIdx] = 2;
+                    state.currentHead = cIdx;
+                    state.ops++;
+                    state.visitedCount++;
+                    state.soundNorm = 1.0 - Math.min(1, Math.hypot(newX - endX, newY - endY) / (cols + rows));
+
+                    if (iter % 2 === 0) yield;
+
+                    if (Math.hypot(newX - endX, newY - endY) <= 2.2 && lineFree(newX, newY, endX, endY)) {
+                        reachedNode = newNodeId;
+                        break;
+                    }
+                }
+            }
+
+            if (reachedNode !== -1) {
+                let curr = reachedNode;
+                const pathCoords = [[endX, endY]];
+                while (curr !== -1) {
+                    pathCoords.push([tree[curr].x, tree[curr].y]);
+                    curr = tree[curr].parent;
+                }
+                pathCoords.reverse();
+
+                let totalCost = 0;
+                for (let i = 0; i < pathCoords.length - 1; i++) {
+                    const p0 = pathCoords[i];
+                    const p1 = pathCoords[i + 1];
+                    const segDist = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]);
+                    const steps = Math.ceil(segDist * 2.5);
+                    for (let s = 0; s <= steps; s++) {
+                        const t = s / steps;
+                        const cx = Math.floor(p0[0] + (p1[0] - p0[0]) * t);
+                        const cy = Math.floor(p0[1] + (p1[1] - p0[1]) * t);
+                        if (cx >= 0 && cx < cols && cy >= 0 && cy < rows) {
+                            const idx = cy * cols + cx;
+                            state.cellVis[idx] = 3;
+                            totalCost += terrain[idx] === 2 ? 5 : 1;
+                        }
+                    }
+                    state.soundNorm = 0.3 + (i / pathCoords.length) * 0.7;
+                    yield;
+                }
+                state.pathCost = Math.round(totalCost);
+            }
+
+            state.currentHead = -1;
+            state.finished = true;
+        }
+
+        // ============================================================================
+        // 4. CONTROLADOR PRINCIPAL DEL MOTOR GRÁFICO AAA
+        // ============================================================================
+        class AAAAlgorithmVisualizer {
+            constructor() {
+                this.canvas = document.getElementById('algoCanvas');
+                this.ctx = this.canvas.getContext('2d', { alpha: false });
+                this.profCanvas = document.getElementById('profilerCanvas');
+                this.profCtx = this.profCanvas.getContext('2d', { alpha: false });
+
+                this.synth = new PureWaveSynthesizer();
+
+                // Configuración global
+                this.domain = 'sort'; // 'sort' | 'path'
+                this.raceMode = true; // Split-Screen A vs B
+                this.isRunning = false;
+                this.opsPerFrame = 25;
+
+                // Configuración de Ordenamiento
+                this.arraySize = 120;
+                this.baseArray = new Float32Array(this.arraySize);
+
+                // Configuración de Mapa de Rutas Compartido (para carrera justa)
+                this.gridLevel = 2;
+                this.grid = {
+                    cols: 59,
+                    rows: 23,
+                    terrain: null, // 0 = libre, 1 = muro, 2 = lodo (peso x5)
+                    startX: 1,
+                    startY: 11,
+                    endX: 57,
+                    endY: 11
+                };
+                this.brushType = 'wall'; // 'wall' | 'weight'
+                this.draggingEndpoint = null; // 'start' | 'end' | null
+                this.isPaintingGrid = false;
+                this.paintErase = false;
+
+                // Instancias de Motores A y B
+                this.engineA = null;
+                this.engineB = null;
+                this.winnerDeclared = false;
+
+                // Telemetría
+                this.frameCount = 0;
+                this.opsCounterWindow = 0;
+                this.lastFpsTick = performance.now();
+                this.renderLatencyMs = 0;
+                this.fpsHistory = new Uint8Array(72).fill(60);
+
+                // Optimización Fase 1: Caché de muros y lodo (Zero Garbage Collection)
+                this.cachedWallPath = null;
+                this.cachedMudPath = null;
+                this.gridDirty = true;
+                this.cachedGridW = 0;
+                this.cachedGridH = 0;
+
+                // Fase 5: Motor 3D Wolfenstein Raycaster en Primera Persona
+                this.is3DView = false;
+                this.autoPilot3D = false;
+                this.player3D = {
+                    x: 1.5,
+                    y: 11.5,
+                    dirX: 1.0,
+                    dirY: 0.0,
+                    planeX: 0.0,
+                    planeY: 0.66,
+                    rotSpeed: 0.045,
+                    moveSpeed: 0.08
+                };
+                this.keys = {};
+                this.autoPilotWaypoints = [];
+                this.autoPilotIdx = 0;
+
+                // Fase 5: Compresión de Huffman
+                this.huffman = {
+                    text: 'NEURAL_NETWORK_QUANTUM_BRAIN_AI',
+                    tree: null,
+                    codes: {},
+                    freqs: {},
+                    asciiBits: 0,
+                    treeBits: 0,
+                    ratio: 0,
+                    bitstream: ''
+                };
+                this.buildHuffmanTree();
+
+                // Fase 5: Criptografía RSA & Curvas Elípticas (ECC)
+                this.crypto = {
+                    subtab: 'rsa',
+                    rsaMsg: 'CIPHER2026',
+                    p: 61,
+                    q: 53,
+                    n: 3233,
+                    e: 17,
+                    d: 2753,
+                    rsaCiphertext: [],
+                    rsaDecrypted: '',
+                    eccA: -3,
+                    eccB: 3,
+                    eccP_x: -1.80,
+                    eccQ_x: 0.50
+                };
+                this.encryptRSA();
+
+                this.populateAlgorithmSelects();
+                this.resizeViewport();
+                this.initSharedGrid();
+                this.generateRecursiveMaze();
+                this.generateBaseArray('random');
+                this.resetEngines();
+                this.bindEvents();
+                if (window.location.search.includes('clean') || window.location.search.includes('visual')) {
+                    this.synth.enabled = false; // Mute for clean
+                    setTimeout(() => {
+                        if (!this.isRunning) this.isRunning = true;
+                    }, 250);
+                }
+            }
+
+            populateAlgorithmSelects() {
+                const selA = document.getElementById('selectAlgoA');
+                const selB = document.getElementById('selectAlgoB');
+                selA.innerHTML = '';
+                selB.innerHTML = '';
+
+                const catalog = this.domain === 'sort' ? SORT_CATALOG : PATH_CATALOG;
+                const keys = Object.keys(catalog);
+
+                keys.forEach((k) => {
+                    selA.add(new Option(catalog[k].name, k));
+                    selB.add(new Option(catalog[k].name, k));
+                });
+
+                if (this.domain === 'sort') {
+                    selA.value = 'quicksort';
+                    selB.value = 'bubblesort';
+                } else {
+                    selA.value = 'astar';
+                    selB.value = 'dijkstra';
+                }
+            }
+
+            resizeViewport() {
+                const vp = document.getElementById('viewport');
+                this.width = vp.clientWidth || (window.innerWidth - 325);
+                this.height = vp.clientHeight || window.innerHeight;
+                this.canvas.width = this.width;
+                this.canvas.height = this.height;
+            }
+
+            generateBaseArray(mode = 'random') {
+                this.baseArray = new Float32Array(this.arraySize);
+                for (let i = 0; i < this.arraySize; i++) {
+                    if (mode === 'reversed') {
+                        this.baseArray[i] = 1.0 - (i / this.arraySize) * 0.92;
+                    } else {
+                        this.baseArray[i] = 0.06 + Math.random() * 0.90;
+                    }
+                }
+            }
+
+            initSharedGrid(cols = 59, rows = 23) {
+                this.grid.cols = cols;
+                this.grid.rows = rows;
+                this.grid.terrain = new Uint8Array(cols * rows);
+                this.gridDirty = true;
+                if (this.player3D) {
+                    this.player3D.x = this.grid.startX + 0.5;
+                    this.player3D.y = this.grid.startY + 0.5;
+                    this.player3D.dirX = 1.0;
+                    this.player3D.dirY = 0.0;
+                    this.player3D.planeX = 0.0;
+                    this.player3D.planeY = 0.66;
+                }
+                this.grid.startX = 1;
+                this.grid.startY = Math.floor(rows / 2) | 1;
+                this.grid.endX = cols - 2;
+                this.grid.endY = Math.floor(rows / 2) | 1;
+            }
+
+            setGridLevel(level) {
+                const GRID_LEVELS = {
+                    1: { cols: 37, rows: 15, name: '37 × 15 (Compacto)' },
+                    2: { cols: 59, rows: 23, name: '59 × 23 (Estándar)' },
+                    3: { cols: 87, rows: 33, name: '87 × 33 (Grande)' },
+                    4: { cols: 115, rows: 43, name: '115 × 43 (Muy Grande)' },
+                    5: { cols: 145, rows: 53, name: '145 × 53 (Épico)' }
+                };
+                level = Math.max(1, Math.min(5, parseInt(level, 10)));
+                this.gridLevel = level;
+                const cfg = GRID_LEVELS[level];
+                this.initSharedGrid(cfg.cols, cfg.rows);
+                this.generateRecursiveMaze();
+                this.resetEngines();
+
+                const lbl = document.getElementById('valGridDimensions');
+                if (lbl) lbl.textContent = cfg.name;
+                const rng = document.getElementById('rangeGridDimensions');
+                if (rng) rng.value = level;
+
+                document.querySelectorAll('.grid-size-btn').forEach(btn => {
+                    btn.classList.toggle('active-tab', parseInt(btn.dataset.level, 10) === level);
+                });
+            }
+
+            /**
+             * Generador de Laberintos Recursive Backtracker + Nodos de Lodo
+             */
+            generateRecursiveMaze() {
+                const cols = this.grid.cols;
+                const rows = this.grid.rows;
+                const terrain = this.grid.terrain;
+                terrain.fill(1); // Llenar de muros
+                this.gridDirty = true;
+
+                const visited = new Uint8Array(cols * rows);
+                const stack = [[1, 1]];
+                visited[1 * cols + 1] = 1;
+                terrain[1 * cols + 1] = 0;
+
+                const dirs = [[0, -2], [2, 0], [0, 2], [-2, 0]];
+
+                while (stack.length > 0) {
+                    const [cx, cy] = stack[stack.length - 1];
+                    const neighbors = [];
+
+                    for (let i = 0; i < 4; i++) {
+                        const nx = cx + dirs[i][0];
+                        const ny = cy + dirs[i][1];
+                        if (nx > 0 && nx < cols - 1 && ny > 0 && ny < rows - 1) {
+                            if (visited[ny * cols + nx] === 0) {
+                                neighbors.push([nx, ny, cx + dirs[i][0] / 2, cy + dirs[i][1] / 2]);
+                            }
+                        }
+                    }
+
+                    if (neighbors.length > 0) {
+                        const [nx, ny, wx, wy] = neighbors[Math.floor(Math.random() * neighbors.length)];
+                        visited[ny * cols + nx] = 1;
+                        terrain[wy * cols + wx] = 0;
+                        terrain[ny * cols + nx] = 0;
+                        stack.push([nx, ny]);
+                    } else {
+                        stack.pop();
+                    }
+                }
+
+                // Abrir pasillos adicionales y sembrar zonas de lodo pesado
+                const bonusCorridors = cols > 100 ? 0.26 : (cols > 70 ? 0.22 : 0.18);
+                for (let i = 0; i < terrain.length; i++) {
+                    if (terrain[i] === 1 && Math.random() < bonusCorridors) {
+                        const r = Math.floor(i / cols);
+                        const c = i % cols;
+                        if (c > 0 && c < cols - 1 && r > 0 && r < rows - 1) {
+                            terrain[i] = 0;
+                        }
+                    } else if (terrain[i] === 0 && Math.random() < 0.08) {
+                        terrain[i] = 2; // Lodo pesado x5
+                    }
+                }
+
+                // Garantizar que el inicio y el fin estén despejados
+                const clearAround = (cx, cy) => {
+                    for (let dy = -1; dy <= 1; dy++) {
+                        for (let dx = -1; dx <= 1; dx++) {
+                            const x = cx + dx, y = cy + dy;
+                            if (x > 0 && x < cols - 1 && y > 0 && y < rows - 1) {
+                                terrain[y * cols + x] = 0;
+                            }
+                        }
+                    }
+                };
+                clearAround(this.grid.startX, this.grid.startY);
+                clearAround(this.grid.endX, this.grid.endY);
+            }
+
+            createSortInstance(algoKey) {
+                const state = {
+                    algoKey,
+                    arr: new Float32Array(this.baseArray),
+                    sortedMask: new Uint8Array(this.arraySize),
+                    activeA: -1,
+                    activeB: -1,
+                    pivotIdx: -1,
+                    ops: 0,
+                    accesses: 0,
+                    soundNorm: 0.5,
+                    finished: false,
+                    gen: null
+                };
+                const map = {
+                    timsort: timSortGen,
+                    quicksort: quickSortGen,
+                    mergesort: mergeSortGen,
+                    heapsort: heapSortGen,
+                    radixsort: radixSortGen,
+                    bubblesort: bubbleSortGen
+                };
+                state.gen = map[algoKey](state);
+                return state;
+            }
+
+            createPathInstance(algoKey) {
+                const total = this.grid.cols * this.grid.rows;
+                const state = {
+                    algoKey,
+                    cellVis: new Uint8Array(total), // 0=nada, 1=frontera, 2=visitado, 3=ruta
+                    currentHead: -1,
+                    ops: 0,
+                    visitedCount: 0,
+                    pathCost: 0,
+                    soundNorm: 0.5,
+                    finished: false,
+                    gen: null
+                };
+                if (algoKey === 'biastar') {
+                    state.gen = biAStarGen(state, this.grid);
+                } else if (algoKey === 'jps') {
+                    state.gen = jpsGen(state, this.grid);
+                } else if (algoKey === 'rrt') {
+                    state.gen = rrtGen(state, this.grid);
+                } else {
+                    state.gen = pathSearchGen(state, this.grid, algoKey);
+                }
+                return state;
+            }
+
+            resetEngines() {
+                this.isRunning = false;
+                this.winnerDeclared = false;
+                document.getElementById('statusTag').textContent = '● LISTO';
+                document.getElementById('statusTag').style.color = '#fbbf24';
+                document.getElementById('badgeA').classList.add('hidden');
+                document.getElementById('badgeB').classList.add('hidden');
+
+                const algoA = document.getElementById('selectAlgoA').value;
+                const algoB = document.getElementById('selectAlgoB').value;
+                const catalog = this.domain === 'sort' ? SORT_CATALOG : PATH_CATALOG;
+
+                document.getElementById('titleA').textContent = `MOTOR A: ${catalog[algoA].name}`;
+                document.getElementById('titleB').textContent = `MOTOR B: ${catalog[algoB].name}`;
+                document.getElementById('hudCompA').textContent = catalog[algoA].complexity;
+                document.getElementById('hudCompB').textContent = catalog[algoB].complexity;
+
+                if (this.domain === 'sort') {
+                    this.engineA = this.createSortInstance(algoA);
+                    this.engineB = this.createSortInstance(algoB);
+                } else {
+                    this.engineA = this.createPathInstance(algoA);
+                    this.engineB = this.createPathInstance(algoB);
+                }
+
+                this.updateTelemetryCards();
+                this.renderFrame();
+            }
+
+            stepOnce() {
+                let anyActive = false;
+
+                if (!this.engineA.finished) {
+                    this.engineA.gen.next();
+                    this.opsCounterWindow++;
+                    anyActive = true;
+                    // DSP Estéreo Espacializado: Canal izquierdo (-0.75) para Motor A
+                    this.synth.playTone(this.engineA.soundNorm, this.raceMode ? -0.75 : 0.0);
+                }
+
+                if (this.raceMode && !this.engineB.finished) {
+                    this.engineB.gen.next();
+                    this.opsCounterWindow++;
+                    anyActive = true;
+                    // DSP Estéreo Espacializado: Canal derecho (+0.75) para Motor B
+                    this.synth.playTone(this.engineB.soundNorm, 0.75);
+                }
+
+                // Declarar ganador en Modo Carrera
+                if (this.raceMode && !this.winnerDeclared) {
+                    if (this.engineA.finished && !this.engineB.finished) {
+                        this.winnerDeclared = true;
+                        document.getElementById('badgeA').classList.remove('hidden');
+                    } else if (this.engineB.finished && !this.engineA.finished) {
+                        this.winnerDeclared = true;
+                        document.getElementById('badgeB').classList.remove('hidden');
+                    }
+                }
+
+                if (!anyActive) {
+                    this.isRunning = false;
+                    document.getElementById('statusTag').textContent = '✔ COMPLETADO';
+                    document.getElementById('statusTag').style.color = '#00ff9d';
+                }
+
+                this.updateTelemetryCards();
+            }
+
+            updateTelemetryCards() {
+                document.getElementById('opsA').textContent = this.engineA.ops.toLocaleString();
+                document.getElementById('opsB').textContent = this.engineB.ops.toLocaleString();
+
+                if (this.domain === 'sort') {
+                    document.getElementById('auxA').textContent = `${this.engineA.accesses.toLocaleString()} RAM`;
+                    document.getElementById('auxB').textContent = `${this.engineB.accesses.toLocaleString()} RAM`;
+                } else {
+                    const extraA = this.engineA.pathCost > 0 ? ` (Costo: ${this.engineA.pathCost})` : '';
+                    const extraB = this.engineB.pathCost > 0 ? ` (Costo: ${this.engineB.pathCost})` : '';
+                    document.getElementById('auxA').textContent = `${this.engineA.visitedCount} nodos${extraA}`;
+                    document.getElementById('auxB').textContent = `${this.engineB.visitedCount} nodos${extraB}`;
+                }
+
+                document.getElementById('freqMonitor').textContent = `${this.synth.currentFreq} Hz`;
+            }
+
+            // ============================================================================
+            // RENDERIZADO GRÁFICO AAA (ORDENAMIENTO Y PATHFINDING)
+            // ============================================================================
+            renderFrame() {
+                const t0 = performance.now();
+                const w = this.width;
+                const h = this.height;
+
+                if (this.domain === 'huffman') {
+                    this.renderHuffmanDomain(w, h);
+                } else if (this.domain === 'crypto') {
+                    this.renderCryptoDomain(w, h);
+                } else if (this.domain === 'path' && this.is3DView) {
+                    this.update3DPlayer();
+                    this.render3DRaycaster();
+                } else {
+                    this.ctx.fillStyle = '#04060b';
+                    this.ctx.fillRect(0, 0, w, h);
+
+                    if (this.raceMode) {
+                        const halfH = Math.floor(h / 2);
+                        // Motor A (Superior)
+                        this.renderViewportInstance(this.engineA, 0, 50, w, halfH - 55, '#00ff9d');
+
+                        // Línea divisoria láser entre Motor A y Motor B
+                        this.ctx.strokeStyle = '#1e293b';
+                        this.ctx.lineWidth = 2;
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(0, halfH);
+                        this.ctx.lineTo(w, halfH);
+                        this.ctx.stroke();
+
+                        // Motor B (Inferior)
+                        this.renderViewportInstance(this.engineB, 0, halfH + 8, w, halfH - 58, '#c084fc');
+                    } else {
+                        this.renderViewportInstance(this.engineA, 0, 52, w, h - 102, '#00ff9d');
+                    }
+                }
+
+                this.renderLatencyMs = performance.now() - t0;
+            }
+
+
+
+            renderViewportInstance(inst, x0, y0, w, h, themeColor) {
+                if (this.domain === 'sort') {
+                    this.renderSortBars(inst, x0 + 18, y0 + 14, w - 36, h - 22, themeColor);
+                } else {
+                    this.renderPathGrid(inst, x0 + 18, y0 + 10, w - 36, h - 18);
+                }
+            }
+
+            renderSortBars(inst, x0, y0, w, h, themeColor) {
+                const ctx = this.ctx;
+                const arr = inst.arr;
+                const n = arr.length;
+                const barW = w / n;
+                const gap = barW > 4 ? 1 : 0;
+
+                for (let i = 0; i < n; i++) {
+                    const val = arr[i];
+                    const barH = Math.max(4, val * h);
+                    const bx = x0 + i * barW;
+                    const by = y0 + h - barH;
+
+                    if (i === inst.activeA || i === inst.activeB) {
+                        ctx.fillStyle = '#ff2a55'; // Comparación activa
+                    } else if (i === inst.pivotIdx) {
+                        ctx.fillStyle = '#fbbf24'; // Pivote
+                    } else if (inst.sortedMask[i] === 1) {
+                        ctx.fillStyle = themeColor; // Posición definitiva
+                    } else {
+                        // Gradiente cromático según altura del dato
+                        const hue = Math.floor(185 + val * 55);
+                        ctx.fillStyle = `hsl(${hue}, 85%, 52%)`;
+                    }
+
+                    ctx.fillRect(bx, by, Math.max(1, barW - gap), barH);
+                }
+            }
+
+            
+            // ============================================================================
+            // FASE 5: MOTOR 3D WOLFENSTEIN RAYCASTER DDA EN PRIMERA PERSONA
+            // ============================================================================
+            update3DPlayer() {
+                const p = this.player3D;
+                const cols = this.grid.cols;
+                const rows = this.grid.rows;
+                const terrain = this.grid.terrain;
+
+                // Rotación suave
+                if (this.keys['ArrowLeft'] || this.keys['KeyA']) {
+                    const rot = -p.rotSpeed;
+                    const oldDirX = p.dirX;
+                    p.dirX = p.dirX * Math.cos(rot) - p.dirY * Math.sin(rot);
+                    p.dirY = oldDirX * Math.sin(rot) + p.dirY * Math.cos(rot);
+                    const oldPlaneX = p.planeX;
+                    p.planeX = p.planeX * Math.cos(rot) - p.planeY * Math.sin(rot);
+                    p.planeY = oldPlaneX * Math.sin(rot) + p.planeY * Math.cos(rot);
+                }
+                if (this.keys['ArrowRight'] || this.keys['KeyD']) {
+                    const rot = p.rotSpeed;
+                    const oldDirX = p.dirX;
+                    p.dirX = p.dirX * Math.cos(rot) - p.dirY * Math.sin(rot);
+                    p.dirY = oldDirX * Math.sin(rot) + p.dirY * Math.cos(rot);
+                    const oldPlaneX = p.planeX;
+                    p.planeX = p.planeX * Math.cos(rot) - p.planeY * Math.sin(rot);
+                    p.planeY = oldPlaneX * Math.sin(rot) + p.planeY * Math.cos(rot);
+                }
+
+                // Avance y retroceso con colisión elástica con muros
+                const isFree = (x, y) => {
+                    const ix = Math.floor(x);
+                    const iy = Math.floor(y);
+                    if (ix < 0 || ix >= cols || iy < 0 || iy >= rows) return false;
+                    return terrain[iy * cols + ix] !== 1;
+                };
+
+                let move = 0;
+                if (this.keys['ArrowUp'] || this.keys['KeyW']) move = p.moveSpeed;
+                if (this.keys['ArrowDown'] || this.keys['KeyS']) move = -p.moveSpeed;
+
+                if (move !== 0) {
+                    const nextX = p.x + p.dirX * move;
+                    const nextY = p.y + p.dirY * move;
+                    if (isFree(nextX, p.y)) p.x = nextX;
+                    if (isFree(p.x, nextY)) p.y = nextY;
+                }
+
+                // Bot Autónomo que sigue la ruta calculada (cellVis === 3)
+                if (this.autoPilot3D) {
+                    this.updateAutoPilot();
+                }
+            }
+
+            updateAutoPilot() {
+                const cols = this.grid.cols;
+                const rows = this.grid.rows;
+                const vis = this.engineA.cellVis;
+                const p = this.player3D;
+
+                // Reconstruir lista de waypoints de la ruta óptima
+                if (this.autoPilotWaypoints.length === 0) {
+                    const wp = [];
+                    for (let r = 0; r < rows; r++) {
+                        for (let c = 0; c < cols; c++) {
+                            if (vis[r * cols + c] === 3) {
+                                wp.push({ x: c + 0.5, y: r + 0.5 });
+                            }
+                        }
+                    }
+                    if (wp.length > 0) {
+                        // Ordenar por distancia secuencial desde el jugador hacia la meta
+                        wp.sort((a, b) => {
+                            const da = Math.hypot(a.x - (this.grid.endX + 0.5), a.y - (this.grid.endY + 0.5));
+                            const db = Math.hypot(b.x - (this.grid.endX + 0.5), b.y - (this.grid.endY + 0.5));
+                            return db - da; // Desde más lejos hacia la meta
+                        });
+                        this.autoPilotWaypoints = wp;
+                        this.autoPilotIdx = 0;
+                    }
+                }
+
+                if (this.autoPilotWaypoints.length > 0 && this.autoPilotIdx < this.autoPilotWaypoints.length) {
+                    const target = this.autoPilotWaypoints[this.autoPilotIdx];
+                    const dx = target.x - p.x;
+                    const dy = target.y - p.y;
+                    const dist = Math.hypot(dx, dy);
+
+                    if (dist < 0.45) {
+                        this.autoPilotIdx++;
+                    } else {
+                        const targetAngle = Math.atan2(dy, dx);
+                        const curAngle = Math.atan2(p.dirY, p.dirX);
+                        let diff = targetAngle - curAngle;
+                        while (diff < -Math.PI) diff += Math.PI * 2;
+                        while (diff > Math.PI) diff -= Math.PI * 2;
+
+                        const rotStep = Math.sign(diff) * Math.min(Math.abs(diff), 0.08);
+                        const oldDirX = p.dirX;
+                        p.dirX = p.dirX * Math.cos(rotStep) - p.dirY * Math.sin(rotStep);
+                        p.dirY = oldDirX * Math.sin(rotStep) + p.dirY * Math.cos(rotStep);
+                        const oldPlaneX = p.planeX;
+                        p.planeX = p.planeX * Math.cos(rotStep) - p.planeY * Math.sin(rotStep);
+                        p.planeY = oldPlaneX * Math.sin(rotStep) + p.planeY * Math.cos(rotStep);
+
+                        p.x += p.dirX * 0.06;
+                        p.y += p.dirY * 0.06;
+                    }
+                }
+            }
+
+            render3DRaycaster() {
+                const ctx = this.ctx;
+                const w = this.width;
+                const h = this.height;
+                const halfH = Math.floor(h / 2);
+                const cols = this.grid.cols;
+                const rows = this.grid.rows;
+                const terrain = this.grid.terrain;
+                const vis = this.engineA ? this.engineA.cellVis : null;
+                const p = this.player3D;
+
+                // 1. Cielo cósmico con gradiente atmosférico
+                const ceilGrad = ctx.createLinearGradient(0, 0, 0, halfH);
+                ceilGrad.addColorStop(0, '#020408');
+                ceilGrad.addColorStop(1, '#0c1626');
+                ctx.fillStyle = ceilGrad;
+                ctx.fillRect(0, 0, w, halfH);
+
+                // 2. Suelo tech con gradiente y líneas de perspectiva
+                const floorGrad = ctx.createLinearGradient(0, halfH, 0, h);
+                floorGrad.addColorStop(0, '#090e18');
+                floorGrad.addColorStop(1, '#030509');
+                ctx.fillStyle = floorGrad;
+                ctx.fillRect(0, halfH, w, halfH);
+
+                // 3. Algoritmo DDA (Digital Differential Analyzer) de Raycasting
+                const numRays = Math.min(480, Math.floor(w / 2.2));
+                const stripW = w / numRays;
+
+                for (let x = 0; x < numRays; x++) {
+                    const cameraX = (2 * x) / numRays - 1;
+                    const rayDirX = p.dirX + p.planeX * cameraX;
+                    const rayDirY = p.dirY + p.planeY * cameraX;
+
+                    let mapX = Math.floor(p.x);
+                    let mapY = Math.floor(p.y);
+
+                    const deltaDistX = Math.abs(1 / (rayDirX || 0.00001));
+                    const deltaDistY = Math.abs(1 / (rayDirY || 0.00001));
+                    let perpWallDist = 0;
+
+                    let stepX, stepY;
+                    let sideDistX, sideDistY;
+
+                    if (rayDirX < 0) {
+                        stepX = -1;
+                        sideDistX = (p.x - mapX) * deltaDistX;
+                    } else {
+                        stepX = 1;
+                        sideDistX = (mapX + 1.0 - p.x) * deltaDistX;
+                    }
+
+                    if (rayDirY < 0) {
+                        stepY = -1;
+                        sideDistY = (p.y - mapY) * deltaDistY;
+                    } else {
+                        stepY = 1;
+                        sideDistY = (mapY + 1.0 - p.y) * deltaDistY;
+                    }
+
+                    let hit = 0;
+                    let side = 0; // 0 para eje X, 1 para eje Y
+                    let steps = 0;
+
+                    while (hit === 0 && steps < 75) {
+                        steps++;
+                        if (sideDistX < sideDistY) {
+                            sideDistX += deltaDistX;
+                            mapX += stepX;
+                            side = 0;
+                        } else {
+                            sideDistY += deltaDistY;
+                            mapY += stepY;
+                            side = 1;
+                        }
+
+                        if (mapX < 0 || mapX >= cols || mapY < 0 || mapY >= rows) {
+                            hit = 1;
+                            break;
+                        }
+                        if (terrain[mapY * cols + mapX] === 1) {
+                            hit = 1;
+                        }
+                    }
+
+                    if (side === 0) {
+                        perpWallDist = (sideDistX - deltaDistX);
+                    } else {
+                        perpWallDist = (sideDistY - deltaDistY);
+                    }
+                    perpWallDist = Math.max(0.08, perpWallDist);
+
+                    // Altura del strip vertical
+                    const lineH = Math.floor(h / perpWallDist);
+                    const drawStart = Math.max(0, -lineH / 2 + halfH);
+                    const drawEnd = Math.min(h - 1, lineH / 2 + halfH);
+
+                    // Sombreado fotométrico con atenuación por niebla de profundidad
+                    const fog = Math.max(0.06, 1.0 - perpWallDist / 26.0);
+                    let wallR = 26, wallG = 38, wallB = 58;
+
+                    // Si la celda adyacente es parte de la ruta óptima o visitada, emitir luminiscencia
+                    const cIdx = Math.max(0, Math.min(cols * rows - 1, mapY * cols + mapX));
+                    if (vis && vis[cIdx] === 3) {
+                        wallR = 0; wallG = 255; wallB = 157;
+                    } else if (vis && vis[cIdx] === 1) {
+                        wallR = 0; wallG = 229; wallB = 255;
+                    }
+
+                    if (side === 1) {
+                        wallR = Math.floor(wallR * 0.72);
+                        wallG = Math.floor(wallG * 0.72);
+                        wallB = Math.floor(wallB * 0.72);
+                    }
+
+                    wallR = Math.floor(wallR * fog);
+                    wallG = Math.floor(wallG * fog);
+                    wallB = Math.floor(wallB * fog);
+
+                    ctx.fillStyle = `rgb(${wallR},${wallG},${wallB})`;
+                    ctx.fillRect(x * stripW, drawStart, Math.ceil(stripW), drawEnd - drawStart);
+
+                    // Línea de acento sci-fi de zócalo
+                    if (fog > 0.25) {
+                        ctx.fillStyle = `rgba(0, 229, 255, ${fog * 0.45})`;
+                        ctx.fillRect(x * stripW, drawEnd - 3, Math.ceil(stripW), 2);
+                    }
+                }
+
+                // 4. Retícula HUD en el centro de visión
+                ctx.strokeStyle = 'rgba(0, 229, 255, 0.45)';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.arc(w / 2, halfH, 12, 0, Math.PI * 2);
+                ctx.moveTo(w / 2 - 18, halfH); ctx.lineTo(w / 2 - 6, halfH);
+                ctx.moveTo(w / 2 + 6, halfH); ctx.lineTo(w / 2 + 18, halfH);
+                ctx.moveTo(w / 2, halfH - 18); ctx.lineTo(w / 2, halfH - 6);
+                ctx.moveTo(w / 2, halfH + 6); ctx.lineTo(w / 2, halfH + 18);
+                ctx.stroke();
+
+                // Brújula digital superior
+                const compassAngle = (Math.atan2(p.dirY, p.dirX) * 180 / Math.PI + 360) % 360;
+                ctx.fillStyle = 'rgba(10, 15, 25, 0.85)';
+                ctx.fillRect(w / 2 - 80, 56, 160, 26);
+                ctx.strokeStyle = '#1e293b';
+                ctx.strokeRect(w / 2 - 80, 56, 160, 26);
+                ctx.fillStyle = '#00e5ff';
+                ctx.font = '700 11px Consolas, monospace';
+                ctx.textAlign = 'center';
+                if (!document.documentElement.classList.contains('pure-simulation-mode')) ctx.fillText(`RUMBO: ${Math.round(compassAngle)}° | POS: (${p.x.toFixed(1)}, ${p.y.toFixed(1)})`, w / 2, 73);
+
+                // 5. Radar Holográfico 2D en esquina superior derecha
+                const rw = 160;
+                const rh = 110;
+                const rx0 = w - rw - 18;
+                const ry0 = 56;
+                ctx.fillStyle = 'rgba(8, 13, 22, 0.88)';
+                ctx.fillRect(rx0, ry0, rw, rh);
+                ctx.strokeStyle = '#00e5ff';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(rx0, ry0, rw, rh);
+
+                const rCellW = rw / cols;
+                const rCellH = rh / rows;
+
+                // Muros minimapa
+                ctx.fillStyle = '#1e293b';
+                for (let r = 0; r < rows; r++) {
+                    for (let c = 0; c < cols; c++) {
+                        if (terrain[r * cols + c] === 1) {
+                            ctx.fillRect(rx0 + c * rCellW, ry0 + r * rCellH, rCellW, rCellH);
+                        } else if (vis && vis[r * cols + c] === 3) {
+                            ctx.fillStyle = '#00ff9d';
+                            ctx.fillRect(rx0 + c * rCellW, ry0 + r * rCellH, rCellW, rCellH);
+                            ctx.fillStyle = '#1e293b';
+                        }
+                    }
+                }
+
+                // Posición y cono de visión del jugador
+                const plX = rx0 + p.x * rCellW;
+                const plY = ry0 + p.y * rCellH;
+                ctx.fillStyle = '#00e5ff';
+                ctx.beginPath();
+                ctx.arc(plX, plY, 3.5, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.strokeStyle = 'rgba(0, 229, 255, 0.7)';
+                ctx.beginPath();
+                ctx.moveTo(plX, plY);
+                ctx.lineTo(plX + p.dirX * 14 + p.planeX * 8, plY + p.dirY * 14 + p.planeY * 8);
+                ctx.moveTo(plX, plY);
+                ctx.lineTo(plX + p.dirX * 14 - p.planeX * 8, plY + p.dirY * 14 - p.planeY * 8);
+                ctx.stroke();
+
+                ctx.fillStyle = '#f1f5f9';
+                ctx.font = '9px Consolas, monospace';
+                ctx.textAlign = 'left';
+                if (!document.documentElement.classList.contains('pure-simulation-mode')) ctx.fillText('RADAR TÁCTICO 3D', rx0 + 6, ry0 + 13);
+            }
+
+            // ============================================================================
+            // FASE 5: DOMINIO DE COMPRESIÓN DE HUFFMAN (ÁRBOL BINARIO Y PREFIJOS)
+            // ============================================================================
+            buildHuffmanTree() {
+                const text = this.huffman.text || 'TEST';
+                const freqs = {};
+                for (let ch of text) freqs[ch] = (freqs[ch] || 0) + 1;
+                this.huffman.freqs = freqs;
+
+                const heap = Object.keys(freqs).map(c => ({
+                    char: c,
+                    freq: freqs[c],
+                    left: null,
+                    right: null
+                }));
+
+                heap.sort((a, b) => a.freq - b.freq);
+
+                while (heap.length > 1) {
+                    const left = heap.shift();
+                    const right = heap.shift();
+                    const parent = {
+                        char: null,
+                        freq: left.freq + right.freq,
+                        left,
+                        right
+                    };
+                    heap.push(parent);
+                    heap.sort((a, b) => a.freq - b.freq);
+                }
+
+                this.huffman.tree = heap[0] || null;
+
+                const codes = {};
+                const assignCodes = (node, prefix) => {
+                    if (!node) return;
+                    if (node.char !== null) {
+                        codes[node.char] = prefix || '0';
+                    }
+                    assignCodes(node.left, prefix + '0');
+                    assignCodes(node.right, prefix + '1');
+                };
+                assignCodes(this.huffman.tree, '');
+                this.huffman.codes = codes;
+
+                let treeBits = 0;
+                let bitstream = '';
+                for (let ch of text) {
+                    const cCode = codes[ch] || '0';
+                    treeBits += cCode.length;
+                    bitstream += cCode;
+                }
+                const asciiBits = text.length * 8;
+                const ratio = Math.max(0, ((1 - treeBits / asciiBits) * 100));
+
+                this.huffman.asciiBits = asciiBits;
+                this.huffman.treeBits = treeBits;
+                this.huffman.ratio = ratio;
+                this.huffman.bitstream = bitstream;
+
+                const lblRatio = document.getElementById('valHuffmanRatio');
+                if (lblRatio) lblRatio.textContent = `${ratio.toFixed(1)}% Espacio Ahorrado`;
+                const lblAscii = document.getElementById('valHuffmanAsciiBits');
+                if (lblAscii) lblAscii.textContent = `${asciiBits} bits`;
+                const lblTree = document.getElementById('valHuffmanTreeBits');
+                if (lblTree) lblTree.textContent = `${treeBits} bits`;
+            }
+
+            renderHuffmanDomain(w, h) {
+                const ctx = this.ctx;
+                ctx.fillStyle = '#04060b';
+                ctx.fillRect(0, 0, w, h);
+
+                ctx.fillStyle = '#00e5ff';
+                ctx.font = '700 16px Segoe UI, sans-serif';
+                ctx.textAlign = 'left';
+                ctx.fillText('ÁRBOL DE COMPRESIÓN DE HUFFMAN (OPTIMIZACIÓN DE ENTROPÍA)', 24, 102);
+
+                ctx.fillStyle = '#94a3b8';
+                ctx.font = '12px Segoe UI, sans-serif';
+                ctx.fillText(`Cadena: "${this.huffman.text}" | Entropía Original: ${this.huffman.asciiBits} bits | Codificado: ${this.huffman.treeBits} bits (${this.huffman.ratio.toFixed(1)}% compresión)`, 24, 126);
+
+                // Dibujar el árbol binario recursivamente
+                if (this.huffman.tree) {
+                    const startX = w / 2;
+                    const startY = 175;
+                    const drawNode = (node, x, y, dx, level) => {
+                        if (!node) return;
+
+                        if (node.left) {
+                            ctx.strokeStyle = '#1e293b';
+                            ctx.lineWidth = 1.5;
+                            ctx.beginPath();
+                            ctx.moveTo(x, y);
+                            ctx.lineTo(x - dx, y + 60);
+                            ctx.stroke();
+
+                            ctx.fillStyle = '#00e5ff';
+                            ctx.font = '700 11px Consolas, monospace';
+                            ctx.textAlign = 'center';
+                            ctx.fillText('0', x - dx / 2 - 8, y + 30);
+
+                            drawNode(node.left, x - dx, y + 60, dx * 0.52, level + 1);
+                        }
+
+                        if (node.right) {
+                            ctx.strokeStyle = '#1e293b';
+                            ctx.lineWidth = 1.5;
+                            ctx.beginPath();
+                            ctx.moveTo(x, y);
+                            ctx.lineTo(x + dx, y + 60);
+                            ctx.stroke();
+
+                            ctx.fillStyle = '#c084fc';
+                            ctx.font = '700 11px Consolas, monospace';
+                            ctx.textAlign = 'center';
+                            ctx.fillText('1', x + dx / 2 + 8, y + 30);
+
+                            drawNode(node.right, x + dx, y + 60, dx * 0.52, level + 1);
+                        }
+
+                        // Nodo circular
+                        ctx.fillStyle = node.char !== null ? 'rgba(0, 255, 157, 0.22)' : 'rgba(30, 41, 59, 0.8)';
+                        ctx.strokeStyle = node.char !== null ? '#00ff9d' : '#334155';
+                        ctx.lineWidth = node.char !== null ? 2 : 1;
+                        ctx.beginPath();
+                        ctx.arc(x, y, 16, 0, Math.PI * 2);
+                        ctx.fill();
+                        ctx.stroke();
+
+                        ctx.fillStyle = '#f1f5f9';
+                        ctx.font = '700 11px Consolas, monospace';
+                        ctx.textAlign = 'center';
+                        const label = node.char !== null ? `'${node.char}'` : node.freq;
+                        ctx.fillText(label, x, y + 4);
+
+                        if (node.char !== null) {
+                            ctx.fillStyle = '#00ff9d';
+                            ctx.font = '9.5px Consolas, monospace';
+                            ctx.fillText(this.huffman.codes[node.char] || '', x, y + 27);
+                        }
+                    };
+
+                    drawNode(this.huffman.tree, startX, startY, Math.min(260, w / 4), 0);
+                }
+
+                // Panel inferior con bitstream codificado
+                const bitstreamPreview = this.huffman.bitstream.slice(0, 120) + (this.huffman.bitstream.length > 120 ? '...' : '');
+                ctx.fillStyle = '#090e18';
+                ctx.fillRect(24, h - 85, w - 48, 60);
+                ctx.strokeStyle = '#1e293b';
+                ctx.strokeRect(24, h - 85, w - 48, 60);
+
+                ctx.fillStyle = '#00ff9d';
+                ctx.font = '700 11px Consolas, monospace';
+                ctx.textAlign = 'left';
+                ctx.fillText('STREAM BINARIO PREFIJO (BITS CODIFICADOS):', 36, h - 65);
+
+                ctx.fillStyle = '#38bdf8';
+                ctx.font = '12px Consolas, monospace';
+                ctx.fillText(bitstreamPreview || 'N/A', 36, h - 42);
+            }
+
+            // ============================================================================
+            // FASE 5: DOMINIO DE CRIPTOGRAFÍA RSA & CURVAS ELÍPTICAS (ECC)
+            // ============================================================================
+            modPow(base, exp, mod) {
+                let res = 1n;
+                base = BigInt(base) % BigInt(mod);
+                exp = BigInt(exp);
+                mod = BigInt(mod);
+                while (exp > 0n) {
+                    if (exp % 2n === 1n) res = (res * base) % mod;
+                    base = (base * base) % mod;
+                    exp = exp / 2n;
+                }
+                return Number(res);
+            }
+
+            encryptRSA() {
+                const msg = this.crypto.rsaMsg || 'CIPHER';
+                const { e, n, d } = this.crypto;
+                const encrypted = [];
+                for (let i = 0; i < msg.length; i++) {
+                    const code = msg.charCodeAt(i);
+                    encrypted.push(this.modPow(code, e, n));
+                }
+                this.crypto.rsaCiphertext = encrypted;
+
+                // Descifrado automático de verificación
+                let decrypted = '';
+                for (let c of encrypted) {
+                    decrypted += String.fromCharCode(this.modPow(c, d, n));
+                }
+                this.crypto.rsaDecrypted = decrypted;
+            }
+
+            renderCryptoDomain(w, h) {
+                const ctx = this.ctx;
+                ctx.fillStyle = '#04060b';
+                ctx.fillRect(0, 0, w, h);
+
+                if (this.crypto.subtab === 'rsa') {
+                    // MODO RSA: Cifrado asimétrico y matriz de difusión (Efecto Avalancha)
+                    ctx.fillStyle = '#00e5ff';
+                    ctx.font = '700 16px Segoe UI, sans-serif';
+                    ctx.textAlign = 'left';
+                    ctx.fillText('CRIPTOSISTEMA RSA ASIMÉTRICO (FACTORIZACIÓN DE PRIMOS Y DIFUSIÓN)', 24, 102);
+
+                    ctx.fillStyle = '#94a3b8';
+                    ctx.font = '12px Segoe UI, sans-serif';
+                    ctx.fillText(`Parámetros: p = ${this.crypto.p}, q = ${this.crypto.q} | Módulo n = ${this.crypto.n} | Clave Pública e = ${this.crypto.e} | Clave Privada d = ${this.crypto.d}`, 24, 126);
+
+                    // Tarjetas de Mensaje y Cifrado
+                    ctx.fillStyle = '#090e18';
+                    ctx.fillRect(24, 125, w / 2 - 32, 100);
+                    ctx.strokeStyle = '#00ff9d';
+                    ctx.strokeRect(24, 125, w / 2 - 32, 100);
+                    ctx.fillStyle = '#00ff9d';
+                    ctx.font = '700 12px Consolas, monospace';
+                    ctx.fillText('TEXTO PLANO ORIGINAL [M]:', 36, 150);
+                    ctx.fillStyle = '#ffffff';
+                    ctx.font = '15px Consolas, monospace';
+                    ctx.fillText(this.crypto.rsaMsg, 36, 180);
+
+                    ctx.fillStyle = '#090e18';
+                    ctx.fillRect(w / 2 + 8, 125, w / 2 - 32, 100);
+                    ctx.strokeStyle = '#c084fc';
+                    ctx.strokeRect(w / 2 + 8, 125, w / 2 - 32, 100);
+                    ctx.fillStyle = '#c084fc';
+                    ctx.font = '700 12px Consolas, monospace';
+                    ctx.fillText('CRIPTOGRAMA MODULAR [C = Mᵉ mod n]:', w / 2 + 20, 150);
+                    ctx.fillStyle = '#38bdf8';
+                    ctx.font = '14px Consolas, monospace';
+                    ctx.fillText(`[${this.crypto.rsaCiphertext.join(', ')}]`, w / 2 + 20, 180);
+
+                    // Matriz de Difusión de Avalancha (8x8 bits)
+                    ctx.fillStyle = '#00e5ff';
+                    ctx.font = '700 13px Segoe UI, sans-serif';
+                    ctx.fillText('MATRIZ DE DIFUSIÓN DE BITS (EFECTO AVALANCHA CRIPTOGRÁFICO):', 24, 260);
+
+                    const matrixX = 24;
+                    const matrixY = 280;
+                    const cellSize = 30;
+
+                    for (let r = 0; r < 8; r++) {
+                        for (let c = 0; c < 8; c++) {
+                            const bitIdx = r * 8 + c;
+                            const charIdx = Math.floor(bitIdx / 12) % this.crypto.rsaCiphertext.length;
+                            const val = this.crypto.rsaCiphertext[charIdx] || 0;
+                            const isBitOn = (val >> (bitIdx % 12)) & 1;
+
+                            ctx.fillStyle = isBitOn ? '#00e5ff' : '#0f172a';
+                            ctx.fillRect(matrixX + c * (cellSize + 4), matrixY + r * (cellSize + 4), cellSize, cellSize);
+                            ctx.strokeStyle = '#1e293b';
+                            ctx.strokeRect(matrixX + c * (cellSize + 4), matrixY + r * (cellSize + 4), cellSize, cellSize);
+
+                            ctx.fillStyle = isBitOn ? '#04060b' : '#64748b';
+                            ctx.font = '700 11px Consolas, monospace';
+                            ctx.textAlign = 'center';
+                            ctx.fillText(isBitOn ? '1' : '0', matrixX + c * (cellSize + 4) + cellSize / 2, matrixY + r * (cellSize + 4) + cellSize / 2 + 4);
+                        }
+                    }
+
+                    // Panel de explicación
+                    ctx.fillStyle = '#94a3b8';
+                    ctx.font = '12px Segoe UI, sans-serif';
+                    ctx.textAlign = 'left';
+                    const expX = matrixX + 8 * (cellSize + 4) + 24;
+                    ctx.fillText('Propiedades Matemáticas:', expX, 300);
+                    ctx.fillText('• La seguridad de RSA radica en la intratabilidad computacional del problema', expX, 325);
+                    ctx.fillText('  de factorización de enteros gigantes (n = p · q).', expX, 345);
+                    ctx.fillText('• Encriptación asimétrica: sólo el poseedor de la clave privada (d)', expX, 375);
+                    ctx.fillText('  puede calcular el inverso modular y recuperar el mensaje original.', expX, 395);
+                    ctx.fillText(`• Texto descifrado verificado: "${this.crypto.rsaDecrypted}" ✔`, expX, 425);
+                } else {
+                    // MODO ECC: Curva Elíptica de Weierstrass y suma de puntos geométrica
+                    ctx.fillStyle = '#00ff9d';
+                    ctx.font = '700 16px Segoe UI, sans-serif';
+                    ctx.textAlign = 'left';
+                    ctx.fillText('CRIPTOGRAFÍA DE CURVAS ELÍPTICAS (ECC - WEIERSTRASS y² = x³ + ax + b)', 24, 102);
+
+                    const cx0 = w / 2;
+                    const cy0 = h / 2 + 20;
+                    const scale = 58;
+
+                    // Ejes cartesianos
+                    ctx.strokeStyle = '#1e293b';
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.moveTo(40, cy0); ctx.lineTo(w - 40, cy0);
+                    ctx.moveTo(cx0, 110); ctx.lineTo(cx0, h - 40);
+                    ctx.stroke();
+
+                    // Dibujar la curva y^2 = x^3 - 3x + 3
+                    const a = this.crypto.eccA;
+                    const b = this.crypto.eccB;
+                    ctx.strokeStyle = '#00e5ff';
+                    ctx.lineWidth = 2.5;
+
+                    for (let branch = -1; branch <= 1; branch += 2) {
+                        ctx.beginPath();
+                        let first = true;
+                        for (let px = -2.15; px <= 3.8; px += 0.02) {
+                            const rhs = px * px * px + a * px + b;
+                            if (rhs >= 0) {
+                                const py = branch * Math.sqrt(rhs);
+                                const sx = cx0 + px * scale;
+                                const sy = cy0 - py * scale;
+                                if (first) { ctx.moveTo(sx, sy); first = false; }
+                                else { ctx.lineTo(sx, sy); }
+                            } else {
+                                first = true;
+                            }
+                        }
+                        ctx.stroke();
+                    }
+
+                    // Puntos P y Q
+                    const px1 = this.crypto.eccP_x;
+                    const py1 = Math.sqrt(Math.max(0, px1 * px1 * px1 + a * px1 + b));
+                    const px2 = this.crypto.eccQ_x;
+                    const py2 = Math.sqrt(Math.max(0, px2 * px2 * px2 + a * px2 + b));
+
+                    // Pendiente de la secante
+                    let m = (py2 - py1) / ((px2 - px1) || 0.0001);
+                    const px3 = m * m - px1 - px2;
+                    const py3 = m * (px1 - px3) - py1;
+                    const rx = px3;
+                    const ry = -py3; // Reflexión sobre eje X
+
+                    // Línea secante
+                    const lx1 = -2.5, ly1 = py1 + m * (lx1 - px1);
+                    const lx2 = 3.5, ly2 = py1 + m * (lx2 - px1);
+                    ctx.strokeStyle = 'rgba(251, 191, 36, 0.6)';
+                    ctx.setLineDash([4, 4]);
+                    ctx.beginPath();
+                    ctx.moveTo(cx0 + lx1 * scale, cy0 - ly1 * scale);
+                    ctx.lineTo(cx0 + lx2 * scale, cy0 - ly2 * scale);
+                    ctx.stroke();
+
+                    // Línea vertical de reflexión de -R a R
+                    ctx.strokeStyle = 'rgba(192, 132, 252, 0.7)';
+                    ctx.beginPath();
+                    ctx.moveTo(cx0 + rx * scale, cy0 - py3 * scale);
+                    ctx.lineTo(cx0 + rx * scale, cy0 - ry * scale);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+
+                    // Dibujar Punto P
+                    ctx.fillStyle = '#00ff9d';
+                    ctx.beginPath();
+                    ctx.arc(cx0 + px1 * scale, cy0 - py1 * scale, 6, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillText(`P (${px1.toFixed(2)}, ${py1.toFixed(2)})`, cx0 + px1 * scale + 10, cy0 - py1 * scale - 6);
+
+                    // Dibujar Punto Q
+                    ctx.fillStyle = '#fbbf24';
+                    ctx.beginPath();
+                    ctx.arc(cx0 + px2 * scale, cy0 - py2 * scale, 6, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillText(`Q (${px2.toFixed(2)}, ${py2.toFixed(2)})`, cx0 + px2 * scale + 10, cy0 - py2 * scale - 6);
+
+                    // Dibujar Punto R = P + Q
+                    ctx.fillStyle = '#ff2a55';
+                    ctx.beginPath();
+                    ctx.arc(cx0 + rx * scale, cy0 - ry * scale, 7, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillText(`R = P + Q (${rx.toFixed(2)}, ${ry.toFixed(2)})`, cx0 + rx * scale + 12, cy0 - ry * scale + 4);
+                }
+            }
+
+            renderPathGrid(inst, x0, y0, w, h) {
+                const ctx = this.ctx;
+                const cols = this.grid.cols;
+                const rows = this.grid.rows;
+                const cellW = w / cols;
+                const cellH = h / rows;
+                const terrain = this.grid.terrain;
+                const vis = inst.cellVis;
+
+                const pathWall = new Path2D();
+                const pathMud = new Path2D();
+                const pathVisited = new Path2D();
+                const pathFrontier = new Path2D();
+                const pathOptimal = new Path2D();
+
+                const gap = (cols > 100) ? 0.3 : (cols > 70 ? 0.6 : 1);
+                for (let r = 0; r < rows; r++) {
+                    for (let c = 0; c < cols; c++) {
+                        const idx = r * cols + c;
+                        const px = x0 + c * cellW;
+                        const py = y0 + r * cellH;
+                        const cw = Math.max(1, cellW - gap);
+                        const ch = Math.max(1, cellH - gap);
+
+                        if (terrain[idx] === 1) {
+                            pathWall.rect(px, py, cw, ch);
+                        } else {
+                            if (vis[idx] === 3) {
+                                pathOptimal.rect(px, py, cw, ch);
+                            } else if (vis[idx] === 1) {
+                                pathFrontier.rect(px, py, cw, ch);
+                            } else if (vis[idx] === 2) {
+                                pathVisited.rect(px, py, cw, ch);
+                            } else if (terrain[idx] === 2) {
+                                pathMud.rect(px, py, cw, ch);
+                            }
+                        }
+                    }
+                }
+
+                // Fondo de cuadrícula
+                ctx.fillStyle = '#080d16';
+                ctx.fillRect(x0, y0, w, h);
+
+                // Muros
+                ctx.fillStyle = '#1e293b';
+                ctx.fill(pathWall);
+
+                // Terreno Pesado (Lodo x5)
+                ctx.fillStyle = 'rgba(217, 119, 6, 0.45)';
+                ctx.fill(pathMud);
+
+                // Nodos Visitados
+                ctx.fillStyle = 'rgba(14, 116, 144, 0.48)';
+                ctx.fill(pathVisited);
+
+                // Frontera Activa (Open Set)
+                ctx.fillStyle = '#00e5ff';
+                ctx.fill(pathFrontier);
+
+                // Ruta Óptima Encontrada
+                ctx.fillStyle = '#00ff9d';
+                ctx.fill(pathOptimal);
+
+                // Nodo Inicio (Verde Brillante) y Meta (Magenta)
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(x0 + this.grid.startX * cellW, y0 + this.grid.startY * cellH, cellW, cellH);
+
+                ctx.fillStyle = '#ff2a55';
+                ctx.fillRect(x0 + this.grid.endX * cellW, y0 + this.grid.endY * cellH, cellW, cellH);
+            }
+
+            // ============================================================================
+            // INTERACCIÓN CON EL LABERINTO EN PANTALLA
+            // ============================================================================
+            handleCanvasPointer(clientX, clientY, isFirstClick) {
+                if (this.domain !== 'path') return;
+                const rect = this.canvas.getBoundingClientRect();
+                const mx = clientX - rect.left;
+                const my = clientY - rect.top;
+
+                const w = this.width - 36;
+                const x0 = 18;
+                let y0 = 62;
+                let h = this.height - 120;
+
+                if (this.raceMode) {
+                    const halfH = Math.floor(this.height / 2);
+                    if (my < halfH) {
+                        y0 = 60;
+                        h = halfH - 73;
+                    } else {
+                        y0 = halfH + 18;
+                        h = halfH - 76;
+                    }
+                }
+
+                const c = Math.floor(((mx - x0) / w) * this.grid.cols);
+                const r = Math.floor(((my - y0) / h) * this.grid.rows);
+                if (c < 0 || c >= this.grid.cols || r < 0 || r >= this.grid.rows) return;
+
+                if (isFirstClick) {
+                    if (c === this.grid.startX && r === this.grid.startY) {
+                        this.draggingEndpoint = 'start';
+                        return;
+                    }
+                    if (c === this.grid.endX && r === this.grid.endY) {
+                        this.draggingEndpoint = 'end';
+                        return;
+                    }
+                }
+
+                if (this.draggingEndpoint === 'start') {
+                    this.grid.startX = c;
+                    this.grid.startY = r;
+                    this.grid.terrain[r * this.grid.cols + c] = 0;
+                    this.resetEngines();
+                    return;
+                } else if (this.draggingEndpoint === 'end') {
+                    this.grid.endX = c;
+                    this.grid.endY = r;
+                    this.grid.terrain[r * this.grid.cols + c] = 0;
+                    this.resetEngines();
+                    return;
+                }
+
+                if ((c === this.grid.startX && r === this.grid.startY) ||
+                    (c === this.grid.endX && r === this.grid.endY)) return;
+
+                const idx = r * this.grid.cols + c;
+                if (this.paintErase) {
+                    this.grid.terrain[idx] = 0;
+                    this.gridDirty = true;
+                } else {
+                    this.grid.terrain[idx] = (this.brushType === 'wall') ? 1 : 2;
+                this.gridDirty = true;
+                }
+                this.renderFrame();
+            }
+
+            updateProfiler(now) {
+                this.frameCount++;
+                const elapsed = now - this.lastFpsTick;
+                if (elapsed >= 350) {
+                    const fps = Math.round((this.frameCount * 1000) / elapsed);
+                    const opsSec = Math.round((this.opsCounterWindow * 1000) / elapsed);
+
+                    document.getElementById('fpsCounter').textContent = `${fps} FPS`;
+                    document.getElementById('metricOpsSec').textContent = `${opsSec.toLocaleString()} ops/s`;
+                    document.getElementById('metricRenderMs').textContent = `${this.renderLatencyMs.toFixed(2)} ms`;
+
+                    // Enviar telemetría al Launcher Principal si estamos embebidos en iframe
+                    if (window.parent && window.parent !== window) {
+                        try {
+                            window.parent.postMessage({
+                                type: 'telemetry_bridge',
+                                module: 'algorithms',
+                                moduleName: 'ALGO-ENGINE AAA',
+                                fps: fps,
+                                metricKey: 'Cómputo Ops/s',
+                                metricValue: `${opsSec.toLocaleString()} ops/s`,
+                                subtext: `${this.domain === 'sort' ? 'Ordenamiento' : 'Laberinto'} (${this.raceMode ? 'Dual Split' : 'Individual'})`
+                            }, '*');
+                        } catch (e) {}
+                    }
+
+                    this.fpsHistory.copyWithin(0, 1);
+                    this.fpsHistory[this.fpsHistory.length - 1] = Math.min(144, fps);
+                    this.frameCount = 0;
+                    this.opsCounterWindow = 0;
+                    this.lastFpsTick = now;
+
+                    const pCtx = this.profCtx;
+                    const w = this.profCanvas.width;
+                    const h = this.profCanvas.height;
+                    pCtx.fillStyle = '#04060a';
+                    pCtx.fillRect(0, 0, w, h);
+
+                    const bw = w / this.fpsHistory.length;
+                    for (let i = 0; i < this.fpsHistory.length; i++) {
+                        const v = this.fpsHistory[i];
+                        const bh = Math.min(h, (v / 80) * h);
+                        pCtx.fillStyle = v >= 50 ? '#00ff9d' : '#fbbf24';
+                        pCtx.fillRect(i * bw, h - bh, bw - 0.5, bh);
+                    }
+                }
+            }
+
+            bindEvents() {
+                // Conmutador entre Ordenamiento, Pathfinding, Huffman y Criptografía
+                document.querySelectorAll('.domain-btn').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        document.querySelectorAll('.domain-btn').forEach(b => b.classList.remove('active-tab'));
+                        btn.classList.add('active-tab');
+                        this.domain = btn.dataset.domain;
+
+                        const isSort = this.domain === 'sort';
+                        const isPath = this.domain === 'path';
+                        const isHuffman = this.domain === 'huffman';
+                        const isCrypto = this.domain === 'crypto';
+
+                        document.getElementById('sortControls').classList.toggle('hidden', !isSort);
+                        document.getElementById('pathControls').classList.toggle('hidden', !isPath);
+                        document.getElementById('huffmanControls').classList.toggle('hidden', !isHuffman);
+                        document.getElementById('cryptoControls').classList.toggle('hidden', !isCrypto);
+
+                        // Ocultar tarjetas de telemetría de carrera si estamos en Huffman o Crypto
+                        const raceBanner = document.querySelector('.race-banner-container');
+                        if (raceBanner) raceBanner.style.display = (isHuffman || isCrypto) ? 'none' : 'flex';
+
+                        const domainLabels = {
+                            sort: 'ORDENAMIENTO DE MEMORIA (RAM)',
+                            path: 'INTELIGENCIA ARTIFICIAL DE RUTAS',
+                            huffman: 'COMPRESIÓN DE DATOS (ÁRBOL DE HUFFMAN)',
+                            crypto: 'CRIPTOGRAFÍA RSA & CURVAS ELÍPTICAS'
+                        };
+                        document.getElementById('hudDomain').textContent = domainLabels[this.domain] || this.domain;
+
+                        if (isSort || isPath) {
+                            this.populateAlgorithmSelects();
+                            this.resetEngines();
+                        } else if (isHuffman) {
+                            this.buildHuffmanTree();
+                        } else if (isCrypto) {
+                            this.encryptRSA();
+                        }
+                        this.renderFrame();
+                    });
+                });
+
+                // Botones 3D Raycaster Wolfenstein y Bot Autónomo
+                const btnToggle3D = document.getElementById('btnToggle3D');
+                if (btnToggle3D) {
+                    btnToggle3D.addEventListener('click', () => {
+                        this.is3DView = !this.is3DView;
+                        btnToggle3D.textContent = this.is3DView ? '🗺️ Vista 2D Cuadrícula' : '🎮 Vista 3D (Wolfenstein)';
+                        btnToggle3D.classList.toggle('active-3d', this.is3DView);
+                        this.renderFrame();
+                    });
+                }
+
+                const btnAutoPilot = document.getElementById('btnAutoPilot3D');
+                if (btnAutoPilot) {
+                    btnAutoPilot.addEventListener('click', () => {
+                        this.autoPilot3D = !this.autoPilot3D;
+                        this.autoPilotWaypoints = [];
+                        btnAutoPilot.classList.toggle('active-bot', this.autoPilot3D);
+                    });
+                }
+
+                // Eventos de Teclado WASD y Flechas para Vista 3D
+                window.addEventListener('keydown', (e) => {
+                    this.keys[e.code] = true;
+                });
+                window.addEventListener('keyup', (e) => {
+                    this.keys[e.code] = false;
+                });
+
+                // Eventos de Compresión de Huffman
+                const btnHuffBuild = document.getElementById('btnHuffmanBuild');
+                if (btnHuffBuild) {
+                    btnHuffBuild.addEventListener('click', () => {
+                        const txt = document.getElementById('inputHuffmanText').value;
+                        if (txt) {
+                            this.huffman.text = txt;
+                            this.buildHuffmanTree();
+                            this.renderFrame();
+                        }
+                    });
+                }
+
+                const btnHuffPreset = document.getElementById('btnHuffmanPreset');
+                if (btnHuffPreset) {
+                    const phrases = [
+                        'QUANTUM_ENTANGLEMENT_NEURAL_SYNAPSE_2026',
+                        'SMOOTHED_PARTICLE_HYDRODYNAMICS_AND_BARNES_HUT',
+                        'CRYPTOGRAPHIC_ELLIPTIC_CURVE_ZERO_KNOWLEDGE_PROOF'
+                    ];
+                    let phraseIdx = 0;
+                    btnHuffPreset.addEventListener('click', () => {
+                        phraseIdx = (phraseIdx + 1) % phrases.length;
+                        this.huffman.text = phrases[phraseIdx];
+                        document.getElementById('inputHuffmanText').value = phrases[phraseIdx];
+                        this.buildHuffmanTree();
+                        this.renderFrame();
+                    });
+                }
+
+                // Eventos de Criptografía RSA & ECC
+                const tabRSA = document.getElementById('btnCryptoTabRSA');
+                const tabECC = document.getElementById('btnCryptoTabECC');
+                if (tabRSA && tabECC) {
+                    tabRSA.addEventListener('click', () => {
+                        this.crypto.subtab = 'rsa';
+                        tabRSA.classList.add('active');
+                        tabECC.classList.remove('active');
+                        document.getElementById('cryptoRSAPanel').classList.remove('hidden');
+                        document.getElementById('cryptoECCPanel').classList.add('hidden');
+                        this.renderFrame();
+                    });
+                    tabECC.addEventListener('click', () => {
+                        this.crypto.subtab = 'ecc';
+                        tabECC.classList.add('active');
+                        tabRSA.classList.remove('active');
+                        document.getElementById('cryptoECCPanel').classList.remove('hidden');
+                        document.getElementById('cryptoRSAPanel').classList.add('hidden');
+                        this.renderFrame();
+                    });
+                }
+
+                const btnRSAEnc = document.getElementById('btnRSAEncrypt');
+                if (btnRSAEnc) {
+                    btnRSAEnc.addEventListener('click', () => {
+                        this.crypto.rsaMsg = document.getElementById('inputRSAMsg').value || 'TEST';
+                        this.encryptRSA();
+                        this.renderFrame();
+                    });
+                }
+
+                const btnRSADec = document.getElementById('btnRSADecrypt');
+                if (btnRSADec) {
+                    btnRSADec.addEventListener('click', () => {
+                        this.encryptRSA();
+                        this.renderFrame();
+                    });
+                }
+
+                const rangeECC = document.getElementById('rangeECCPointP');
+                if (rangeECC) {
+                    rangeECC.addEventListener('input', (e) => {
+                        this.crypto.eccP_x = parseFloat(e.target.value);
+                        document.getElementById('valECCPointP').textContent = this.crypto.eccP_x.toFixed(2);
+                        this.renderFrame();
+                    });
+                }
+
+                const btnECCAdd = document.getElementById('btnECCAdd');
+                if (btnECCAdd) {
+                    btnECCAdd.addEventListener('click', () => {
+                        this.crypto.eccQ_x = (this.crypto.eccQ_x === 0.50) ? 1.10 : 0.50;
+                        this.renderFrame();
+                    });
+                }
+
+                const btnECCDouble = document.getElementById('btnECCDouble');
+                if (btnECCDouble) {
+                    btnECCDouble.addEventListener('click', () => {
+                        this.crypto.eccQ_x = this.crypto.eccP_x;
+                        this.renderFrame();
+                    });
+                }
+
+                // Botón Modo Carrera Split-Screen
+                const btnRace = document.getElementById('btnToggleRace');
+                btnRace.addEventListener('click', () => {
+                    this.raceMode = !this.raceMode;
+                    btnRace.textContent = this.raceMode
+                        ? '⚔ Modo Carrera (Pantalla Dividida: ON)'
+                        : '▢ Vista Individual (Pantalla Completa)';
+                    btnRace.classList.toggle('active-race', this.raceMode);
+                    document.getElementById('rowAlgoB').classList.toggle('hidden', !this.raceMode);
+                    document.getElementById('cardEngineB').classList.toggle('hidden', !this.raceMode);
+                    document.getElementById('hudChipCompB').classList.toggle('hidden', !this.raceMode);
+                    document.getElementById('hudViewMode').textContent = this.raceMode
+                        ? 'CARRERA SPLIT-SCREEN (VS)'
+                        : 'SINGLE ENGINE VIEW';
+                    this.resetEngines();
+                });
+
+                document.getElementById('selectAlgoA').addEventListener('change', () => this.resetEngines());
+                document.getElementById('selectAlgoB').addEventListener('change', () => this.resetEngines());
+
+                // Ejecutar / Pausar / Paso a Paso
+                const toggleRun = () => {
+                    this.synth.initContext();
+                    if (this.engineA.finished && (!this.raceMode || this.engineB.finished)) {
+                        this.resetEngines();
+                    }
+                    this.isRunning = !this.isRunning;
+                    document.getElementById('statusTag').textContent = this.isRunning ? '● EJECUTANDO' : '❚❚ PAUSADO';
+                    document.getElementById('statusTag').style.color = this.isRunning ? '#00e5ff' : '#fbbf24';
+                };
+
+                document.getElementById('btnRun').addEventListener('click', toggleRun);
+
+                document.getElementById('btnStep').addEventListener('click', () => {
+                    this.synth.initContext();
+                    this.isRunning = false;
+                    this.stepOnce();
+                    this.renderFrame();
+                });
+
+                document.getElementById('btnReset').addEventListener('click', () => this.resetEngines());
+
+                // Sliders
+                document.getElementById('rangeSpeed').addEventListener('input', (e) => {
+                    this.opsPerFrame = parseInt(e.target.value, 10);
+                    document.getElementById('valSpeed').textContent = `${this.opsPerFrame} ops/frame`;
+                });
+
+                document.getElementById('rangeArraySize').addEventListener('input', (e) => {
+                    this.arraySize = parseInt(e.target.value, 10);
+                    document.getElementById('valArraySize').textContent = this.arraySize;
+                    this.generateBaseArray('random');
+                    this.resetEngines();
+                });
+
+                document.getElementById('btnShuffle').addEventListener('click', () => {
+                    this.generateBaseArray('random');
+                    this.resetEngines();
+                });
+
+                document.getElementById('btnReversed').addEventListener('click', () => {
+                    this.generateBaseArray('reversed');
+                    this.resetEngines();
+                });
+
+                // Controles de Laberintos
+                const rangeGrid = document.getElementById('rangeGridDimensions');
+                if (rangeGrid) {
+                    rangeGrid.addEventListener('input', (e) => {
+                        this.setGridLevel(e.target.value);
+                    });
+                }
+
+                document.querySelectorAll('.grid-size-btn').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        this.setGridLevel(btn.dataset.level);
+                    });
+                });
+
+                document.querySelectorAll('.brush-btn').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        document.querySelectorAll('.brush-btn').forEach(b => b.classList.remove('active-tab'));
+                        btn.classList.add('active-tab');
+                        this.brushType = btn.dataset.brush;
+                    });
+                });
+
+                document.getElementById('btnGenMaze').addEventListener('click', () => {
+                    this.generateRecursiveMaze();
+                    this.resetEngines();
+                });
+
+                document.getElementById('btnClearWalls').addEventListener('click', () => {
+                    this.grid.terrain.fill(0);
+                    this.gridDirty = true;
+                    this.resetEngines();
+                });
+
+                // Controles de Audio DSP
+                const btnMute = document.getElementById('btnMute');
+                btnMute.addEventListener('click', () => {
+                    this.synth.enabled = !this.synth.enabled;
+                    btnMute.textContent = this.synth.enabled ? '🔊 Audio: ENCENDIDO' : '🔇 Audio: SILENCIADO';
+                    btnMute.classList.toggle('active-tab', this.synth.enabled);
+                    document.getElementById('hudAudio').textContent = this.synth.enabled ? 'SINTETIZADOR ACTIVO' : 'MUTE';
+                });
+
+                document.getElementById('selectWave').addEventListener('change', (e) => {
+                    this.synth.waveType = e.target.value;
+                });
+
+                document.getElementById('rangeVol').addEventListener('input', (e) => {
+                    const v = parseInt(e.target.value, 10);
+                    this.synth.volume = v / 100;
+                    document.getElementById('valVol').textContent = `${v}%`;
+                });
+
+                // Interacción con el lienzo para dibujar muros o mover nodos Inicio/Meta
+                this.canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+                this.canvas.addEventListener('mousedown', (e) => {
+                    this.isPaintingGrid = true;
+                    this.paintErase = (e.button === 2);
+                    this.handleCanvasPointer(e.clientX, e.clientY, true);
+                });
+
+                window.addEventListener('mousemove', (e) => {
+                    if (!this.isPaintingGrid) return;
+                    this.handleCanvasPointer(e.clientX, e.clientY, false);
+                });
+
+                window.addEventListener('mouseup', () => {
+                    this.isPaintingGrid = false;
+                    this.draggingEndpoint = null;
+                });
+
+                window.addEventListener('keydown', (e) => {
+                    if (e.code === 'Space') {
+                        e.preventDefault();
+                        toggleRun();
+                    } else if (e.code === 'KeyS') {
+                        this.isRunning = false;
+                        this.stepOnce();
+                        this.renderFrame();
+                    }
+                });
+
+                window.addEventListener('resize', () => {
+                    this.resizeViewport();
+                    this.renderFrame();
+                });
+            }
+
+            startLoop() {
+                const loop = (now) => {
+                    requestAnimationFrame(loop);
+                    this.updateProfiler(now);
+
+                    if (this.isRunning) {
+                        const t0 = performance.now();
+                        // Desacoplamiento de cálculo: límite de 8.5ms por frame para blindar 60-120 FPS sin caídas
+                        for (let i = 0; i < this.opsPerFrame; i++) {
+                            this.stepOnce();
+                            if (!this.isRunning) break;
+                            if (performance.now() - t0 > 8.5) break;
+                        }
+                    }
+                    this.renderFrame();
+                };
+                requestAnimationFrame(loop);
+            }
+        }
+
+        window.addEventListener('load', () => {
+            const app = new AAAAlgorithmVisualizer();
+            app.startLoop();
+        });
+    </script>
+</body>
+
+</html>

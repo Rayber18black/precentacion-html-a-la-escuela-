@@ -1,0 +1,3024 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SECOND-BRAIN 3D // Massive Scale (300 a 5000 Nodos con Particionamiento Espacial)</title>
+    <style>
+        :root {
+            --bg-deep: #010307;
+            --hud-glass: rgba(6, 10, 18, 0.88);
+            --border-subtle: rgba(0, 229, 255, 0.22);
+            --accent-cyan: #00e5ff;
+            --accent-neon: #00ff9d;
+            --accent-purple: #c084fc;
+            --accent-amber: #fbbf24;
+            --text-light: #f8fafc;
+            --text-muted: #94a3b8;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-user-select: none;
+            user-select: none;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-deep);
+            color: var(--text-light);
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            position: relative;
+        }
+
+        #webglCanvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+            cursor: grab;
+            background: radial-gradient(circle at 50% 50%, #060e1b 0%, #020408 65%, #000103 100%);
+            touch-action: none;
+        }
+
+        #webglCanvas:active {
+            cursor: grabbing;
+        }
+
+        .floating-header {
+            position: absolute;
+            top: 20px;
+            left: 24px;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            z-index: 10;
+        }
+
+        .floating-header h1 {
+            font-size: 17px;
+            font-weight: 800;
+            letter-spacing: 1.5px;
+            color: var(--text-light);
+            font-family: 'Consolas', monospace;
+            text-shadow: 0 0 16px rgba(0, 229, 255, 0.5);
+        }
+
+        .floating-header h1 span {
+            color: var(--accent-cyan);
+        }
+
+        .floating-header p {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        /* MODO PUENTE MANUAL */
+        .link-mode-banner {
+            position: absolute;
+            top: 72px;
+            left: 24px;
+            background: rgba(251, 191, 36, 0.18);
+            border: 1px solid var(--accent-amber);
+            backdrop-filter: blur(8px);
+            padding: 7px 14px;
+            border-radius: 20px;
+            font-size: 11.5px;
+            font-family: 'Consolas', monospace;
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            opacity: 0;
+            transform: translateY(-8px);
+            pointer-events: none;
+            transition: all 0.25s ease;
+            z-index: 16;
+        }
+
+        .link-mode-banner.visible {
+            opacity: 1;
+            transform: translateY(0);
+            pointer-events: auto;
+        }
+
+        .link-mode-banner button {
+            background: var(--accent-amber);
+            color: #02060d;
+            border: none;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 10.5px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        /* COMANDOS SUPERIORES */
+        .top-command-bar {
+            position: absolute;
+            top: 18px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            z-index: 30;
+        }
+
+        .search-wrapper {
+            position: relative;
+            width: 270px;
+        }
+
+        .search-input {
+            width: 100%;
+            background: var(--hud-glass);
+            border: 1px solid var(--border-subtle);
+            backdrop-filter: blur(12px);
+            color: var(--text-light);
+            padding: 9px 14px 9px 34px;
+            border-radius: 24px;
+            font-size: 12px;
+            outline: none;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.5);
+        }
+
+        .search-input:focus {
+            border-color: var(--accent-cyan);
+            box-shadow: 0 0 16px rgba(0, 229, 255, 0.3);
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 12px;
+            color: var(--accent-cyan);
+            pointer-events: none;
+        }
+
+        .search-results {
+            position: absolute;
+            top: calc(100% + 6px);
+            left: 0;
+            width: 100%;
+            background: rgba(4, 7, 14, 0.96);
+            border: 1px solid var(--border-subtle);
+            backdrop-filter: blur(14px);
+            border-radius: 12px;
+            max-height: 220px;
+            overflow-y: auto;
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.8);
+            display: none;
+            flex-direction: column;
+            padding: 6px;
+            gap: 2px;
+        }
+
+        .search-results.open {
+            display: flex;
+        }
+
+        .search-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 7px 10px;
+            border-radius: 7px;
+            font-size: 11.5px;
+            cursor: pointer;
+            transition: background 0.12s ease;
+        }
+
+        .search-item:hover {
+            background: rgba(0, 229, 255, 0.16);
+        }
+
+        .search-item-left {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .search-item small {
+            font-size: 9.5px;
+            color: var(--text-muted);
+            font-family: 'Consolas', monospace;
+        }
+
+        .btn-add-node {
+            background: rgba(0, 255, 157, 0.15);
+            border: 1px solid var(--accent-neon);
+            color: var(--accent-neon);
+            padding: 8px 14px;
+            border-radius: 24px;
+            font-size: 11.5px;
+            font-weight: 700;
+            cursor: pointer;
+            backdrop-filter: blur(10px);
+            transition: all 0.15s ease;
+            white-space: nowrap;
+        }
+
+        .btn-add-node:hover,
+        .btn-add-node.active {
+            background: var(--accent-neon);
+            color: #02100a;
+            box-shadow: 0 0 16px rgba(0, 255, 157, 0.4);
+        }
+
+        .add-node-popover {
+            position: absolute;
+            top: calc(100% + 8px);
+            right: 0;
+            width: 300px;
+            background: rgba(5, 9, 18, 0.96);
+            border: 1px solid var(--accent-neon);
+            backdrop-filter: blur(14px);
+            padding: 14px;
+            border-radius: 14px;
+            box-shadow: 0 14px 40px rgba(0, 0, 0, 0.85);
+            display: none;
+            flex-direction: column;
+            gap: 9px;
+        }
+
+        .add-node-popover.open {
+            display: flex;
+        }
+
+        .popover-title {
+            font-size: 10.5px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: var(--accent-neon);
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .form-field {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+
+        .form-field label {
+            font-size: 10.5px;
+            color: var(--text-muted);
+        }
+
+        .form-input,
+        .form-select {
+            background: #090e1a;
+            border: 1px solid #1a2740;
+            color: var(--text-light);
+            padding: 7px 10px;
+            border-radius: 6px;
+            font-size: 11.5px;
+            outline: none;
+        }
+
+        .form-input:focus,
+        .form-select:focus {
+            border-color: var(--accent-neon);
+        }
+
+        .btn-inject {
+            background: var(--accent-neon);
+            color: #02120c;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 11.5px;
+            font-weight: 700;
+            cursor: pointer;
+            margin-top: 2px;
+        }
+
+        .focus-banner {
+            position: absolute;
+            top: 72px;
+            left: 24px;
+            background: rgba(0, 229, 255, 0.14);
+            border: 1px solid var(--accent-cyan);
+            backdrop-filter: blur(8px);
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 11.5px;
+            font-family: 'Consolas', monospace;
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            opacity: 0;
+            transform: translateY(-8px);
+            pointer-events: none;
+            transition: all 0.25s ease;
+            z-index: 15;
+        }
+
+        .focus-banner.visible {
+            opacity: 1;
+            transform: translateY(0);
+            pointer-events: auto;
+        }
+
+        .focus-banner button {
+            background: var(--accent-cyan);
+            color: #02060d;
+            border: none;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 10.5px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        /* PANEL DERECHO UNIFICADO (CLÚSTERES + INSPECTOR) */
+        .right-hud-panel {
+            position: absolute;
+            top: 20px;
+            right: 24px;
+            width: 290px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        .right-hud-panel > * {
+            pointer-events: auto;
+        }
+
+        .cluster-legend {
+            background: var(--hud-glass);
+            border: 1px solid var(--border-subtle);
+            backdrop-filter: blur(10px);
+            padding: 12px 15px;
+            border-radius: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.55);
+            width: 100%;
+        }
+
+        .legend-title {
+            font-size: 9.5px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+            margin-bottom: 2px;
+        }
+
+        .cluster-item {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            font-size: 11.5px;
+            cursor: pointer;
+            padding: 3px 6px;
+            border-radius: 5px;
+            transition: all 0.15s ease;
+        }
+
+        .cluster-item:hover,
+        .cluster-item.active-cluster {
+            background: rgba(255, 255, 255, 0.08);
+            color: #ffffff;
+        }
+
+        .dot {
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            box-shadow: 0 0 8px currentColor;
+        }
+
+        .node-card {
+            background: var(--hud-glass);
+            border: 1px solid var(--border-subtle);
+            border-left: 3px solid var(--accent-cyan);
+            backdrop-filter: blur(12px);
+            padding: 14px 16px;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.65);
+            width: 100%;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .node-card small {
+            font-size: 9.5px;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: var(--accent-cyan);
+            font-weight: 700;
+        }
+
+        .node-card h3 {
+            font-size: 15px;
+            margin: 3px 0 5px;
+            color: #ffffff;
+            word-break: break-word;
+        }
+
+        .node-card p {
+            font-size: 11px;
+            color: var(--text-muted);
+            line-height: 1.4;
+            margin-bottom: 7px;
+        }
+
+        .synapse-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            max-height: 100px;
+            overflow-y: auto;
+        }
+
+        .synapse-chip {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: var(--text-light);
+            font-size: 10px;
+            padding: 2px 7px;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.12s ease;
+        }
+
+        .synapse-chip:hover {
+            background: rgba(0, 229, 255, 0.18);
+            border-color: var(--accent-cyan);
+            color: #ffffff;
+        }
+
+        .control-dock {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--hud-glass);
+            border: 1px solid var(--border-subtle);
+            backdrop-filter: blur(12px);
+            padding: 7px 14px;
+            border-radius: 40px;
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            box-shadow: 0 10px 35px rgba(0, 0, 0, 0.65);
+            z-index: 10;
+            max-width: 95vw;
+            overflow-x: auto;
+            scrollbar-width: none;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .control-dock::-webkit-scrollbar {
+            display: none;
+        }
+
+        .dock-btn {
+            background: rgba(255, 255, 255, 0.04);
+            color: var(--text-light);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 6px 11px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            white-space: nowrap;
+        }
+
+        .dock-btn:hover {
+            background: rgba(0, 229, 255, 0.16);
+            border-color: var(--accent-cyan);
+            color: #ffffff;
+        }
+
+        .dock-btn.active {
+            background: rgba(0, 229, 255, 0.2);
+            border-color: var(--accent-cyan);
+            color: var(--accent-cyan);
+        }
+
+        .dock-btn.link-mode-active {
+            background: rgba(251, 191, 36, 0.22);
+            border-color: var(--accent-amber);
+            color: var(--accent-amber);
+        }
+
+        .dock-divider {
+            width: 1px;
+            height: 18px;
+            background: rgba(255, 255, 255, 0.14);
+            margin: 0 2px;
+            flex-shrink: 0;
+        }
+
+        /* SELECTOR DE ESCALA DE NODOS (300, 1500, 3000, 5000) */
+        .scale-selector {
+            display: flex;
+            align-items: center;
+            gap: 3px;
+            background: rgba(255, 255, 255, 0.04);
+            padding: 2px 4px;
+            border-radius: 20px;
+            border: 1px solid rgba(0, 229, 255, 0.2);
+        }
+
+        .scale-label {
+            font-size: 9.5px;
+            font-family: 'Consolas', monospace;
+            color: var(--text-muted);
+            padding: 0 4px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+        }
+
+        .scale-btn {
+            background: transparent;
+            color: var(--text-light);
+            border: none;
+            padding: 4px 8px;
+            border-radius: 14px;
+            font-size: 10.5px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.16s ease;
+            font-family: 'Consolas', monospace;
+        }
+
+        .scale-btn:hover {
+            background: rgba(0, 229, 255, 0.16);
+            color: #ffffff;
+        }
+
+        .scale-btn.active {
+            background: var(--accent-cyan);
+            color: #02060d;
+            font-weight: 800;
+            box-shadow: 0 0 10px rgba(0, 229, 255, 0.45);
+        }
+
+        /* SELECTOR DE FORMAS 3D (CEREBRO, ESFERA, HEXÁGONO, TRIÁNGULO, STICKMAN, ROSTRO) */
+        .shape-selector {
+            display: flex;
+            align-items: center;
+            gap: 3px;
+            background: rgba(255, 255, 255, 0.04);
+            padding: 2px 4px;
+            border-radius: 20px;
+            border: 1px solid rgba(0, 229, 255, 0.2);
+        }
+
+        .shape-label {
+            font-size: 9.5px;
+            font-family: 'Consolas', monospace;
+            color: var(--text-muted);
+            padding: 0 4px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+        }
+
+        .shape-btn {
+            background: transparent;
+            color: var(--text-light);
+            border: none;
+            padding: 4px 8px;
+            border-radius: 14px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.16s ease;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .shape-btn:hover {
+            background: rgba(0, 229, 255, 0.16);
+            color: #ffffff;
+        }
+
+        .shape-btn.active {
+            background: var(--accent-cyan);
+            color: #02060d;
+            font-weight: 800;
+            box-shadow: 0 0 10px rgba(0, 229, 255, 0.45);
+        }
+
+        /* SELECTOR DE COLOR DE MÓDULOS (5 COLORES DEL CEREBRO) */
+        .color-selector {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            background: rgba(255, 255, 255, 0.04);
+            padding: 2px 6px;
+            border-radius: 20px;
+            border: 1px solid rgba(0, 229, 255, 0.2);
+        }
+
+        .color-label {
+            font-size: 9.5px;
+            font-family: 'Consolas', monospace;
+            color: var(--text-muted);
+            padding: 0 3px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+        }
+
+        .color-btn {
+            background: transparent;
+            color: var(--text-light);
+            border: none;
+            padding: 4px 8px;
+            border-radius: 14px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.16s ease;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .color-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: #ffffff;
+        }
+
+        .color-dots-row {
+            display: flex;
+            align-items: center;
+            gap: 3px;
+        }
+
+        .palette-dot {
+            width: 11px;
+            height: 11px;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: all 0.16s ease;
+            border: 1px solid rgba(255, 255, 255, 0.35);
+            display: inline-block;
+        }
+
+        .palette-dot:hover {
+            transform: scale(1.35);
+            box-shadow: 0 0 8px currentColor;
+        }
+
+        .palette-dot.active {
+            transform: scale(1.4);
+            border: 1.6px solid #ffffff;
+            box-shadow: 0 0 10px currentColor;
+        }
+
+        .fps-pill {
+            position: absolute;
+            bottom: 24px;
+            right: 24px;
+            background: var(--hud-glass);
+            border: 1px solid var(--border-subtle);
+            padding: 5px 11px;
+            border-radius: 20px;
+            font-family: 'Consolas', monospace;
+            font-size: 10.5px;
+            color: var(--accent-neon);
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        @media (max-width: 900px) {
+            .control-dock {
+                flex-wrap: wrap;
+                justify-content: center;
+                border-radius: 16px;
+                bottom: 10px;
+            }
+            .right-hud-panel {
+                top: 70px;
+                right: 12px;
+                width: 250px;
+                max-height: calc(100vh - 180px);
+                overflow-y: auto;
+            }
+        }
+    </style>
+
+    <!-- MODO SIMULACIÓN PURA PARA DIAPOSITIVAS (CERO MENÚS, CERO PANELES, CERO TEXTO) -->
+    <script>
+        (function() {
+            function activateClean() {
+                var isClean = window.location.search.indexOf('clean') !== -1 ||
+                              window.location.hash.indexOf('clean') !== -1 ||
+                              window.name.indexOf('clean') !== -1 ||
+                              (window.self !== window.top && window.name !== 'launcher-frame');
+                if (isClean) {
+                    document.documentElement.classList.add('pure-simulation-mode');
+                    if (document.body) document.body.classList.add('pure-simulation-mode');
+                }
+            }
+            activateClean();
+            window.addEventListener('DOMContentLoaded', activateClean);
+        })();
+    </script>
+    <style>
+        html.pure-simulation-mode,
+        html.pure-simulation-mode body {
+            width: 100vw !important;
+            height: 100vh !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: hidden !important;
+            background: #010307 !important;
+        }
+
+        /* Ocultar ABSOLUTAMENTE TODOS los paneles, barras, inspectores, menús y textos */
+        html.pure-simulation-mode body > *:not(#webglCanvas),
+        html.pure-simulation-mode .floating-header,
+        html.pure-simulation-mode .link-mode-banner,
+        html.pure-simulation-mode .top-command-bar,
+        html.pure-simulation-mode .focus-banner,
+        html.pure-simulation-mode .right-hud-panel,
+        html.pure-simulation-mode .cluster-legend,
+        html.pure-simulation-mode .node-card,
+        html.pure-simulation-mode .control-dock,
+        html.pure-simulation-mode .fps-pill,
+        html.pure-simulation-mode .scale-selector,
+        html.pure-simulation-mode .shape-selector,
+        html.pure-simulation-mode .color-selector,
+        html.pure-simulation-mode .search-wrapper,
+        html.pure-simulation-mode .search-results,
+        html.pure-simulation-mode .add-node-popover {
+            display: none !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+            max-width: 0 !important;
+            max-height: 0 !important;
+            width: 0 !important;
+            height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            border: none !important;
+        }
+
+        html.pure-simulation-mode #webglCanvas {
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            display: block !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+    </style>
+
+</head>
+
+<body>
+
+    <canvas id="webglCanvas"></canvas>
+
+    <header class="floating-header">
+        <h1>SECOND-BRAIN <span>3D // MASSIVE SCALE</span></h1>
+        <p id="headerSubtitle">Escala Dinámica (1,500 Nodos) • Particionamiento Espacial • Conexión Manual</p>
+    </header>
+
+    <div class="link-mode-banner" id="linkModeBanner">
+        <span>🔗 PUENTE: <b id="linkModeStep">Selecciona Nodo Origen (A)</b></span>
+        <button id="btnCancelLink">Cancelar</button>
+    </div>
+
+    <div class="top-command-bar">
+        <div class="search-wrapper">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="searchInput" class="search-input" placeholder="Buscar neurona... [Tecla /]"
+                autocomplete="off">
+            <div id="searchResults" class="search-results"></div>
+        </div>
+
+        <button id="btnToggleAdd" class="btn-add-node">+ Nueva Neurona</button>
+
+        <div id="addNodePopover" class="add-node-popover">
+            <div class="popover-title">
+                <span>Inyectar Neurona Masiva</span>
+                <span id="btnClosePopover" style="cursor:pointer; color:#94a3b8;">✕</span>
+            </div>
+            <div class="form-field">
+                <label for="inputNodeName">Concepto / Módulo</label>
+                <input type="text" id="inputNodeName" class="form-input" placeholder="Ej. Motor Gráfico Vulkan..."
+                    maxlength="32">
+            </div>
+            <div class="form-field">
+                <label for="selectNodeCluster">Clúster Cognitivo</label>
+                <select id="selectNodeCluster" class="form-select">
+                    <option value="0">Arquitectura & Memoria C++</option>
+                    <option value="1">Algoritmos & Estructuras</option>
+                    <option value="2">Redes Neuronales & IA</option>
+                    <option value="3">Bases de Datos & Cloud</option>
+                    <option value="4">Gráficos 3D & Shaders</option>
+                </select>
+            </div>
+            <button id="btnConfirmAddNode" class="btn-inject">⚡ Inyectar a Gran Escala</button>
+        </div>
+    </div>
+
+    <div class="focus-banner" id="focusBanner">
+        <span>🎯 CÁMARA ENFOCADA EN: <b id="focusNodeName">Nodo</b></span>
+        <button id="btnExitFocus">Salir (Esc)</button>
+    </div>
+
+    <div class="right-hud-panel">
+        <aside class="cluster-legend">
+            <div class="legend-title">Clústeres Masivos</div>
+            <div class="cluster-item active-cluster" data-cluster="all">
+                <span class="dot" style="color:#ffffff; background:#ffffff;"></span>
+                <span id="legendTotalText">Red Masiva (1,500 Nodos)</span>
+            </div>
+            <div class="cluster-item" data-cluster="0">
+                <span class="dot" style="color:#00e5ff; background:#00e5ff;"></span>
+                <span>Arquitectura C++</span>
+            </div>
+            <div class="cluster-item" data-cluster="1">
+                <span class="dot" style="color:#00ff9d; background:#00ff9d;"></span>
+                <span>Algoritmos</span>
+            </div>
+            <div class="cluster-item" data-cluster="2">
+                <span class="dot" style="color:#c084fc; background:#c084fc;"></span>
+                <span>Redes & IA</span>
+            </div>
+            <div class="cluster-item" data-cluster="3">
+                <span class="dot" style="color:#fbbf24; background:#fbbf24;"></span>
+                <span>Cloud & DB</span>
+            </div>
+            <div class="cluster-item" data-cluster="4">
+                <span class="dot" style="color:#ff2a85; background:#ff2a85;"></span>
+                <span>Shaders 3D</span>
+            </div>
+        </aside>
+
+        <div class="node-card" id="nodeInspector">
+            <small id="nodeCluster">NÚCLEO COGNITIVO</small>
+            <h3 id="nodeTitle">Segundo Cerebro 3D</h3>
+            <p id="nodeDesc">Haz clic sobre cualquier neurona para viajar en la red masiva.</p>
+            <div class="synapse-chips" id="synapseChips"></div>
+        </div>
+    </div>
+
+    <nav class="control-dock">
+        <button class="dock-btn active" id="btnAutoRotate">⟳ Auto-Órbita: ON</button>
+        <button class="dock-btn" id="btnLinkMode">🔗 Conectar</button>
+        <button class="dock-btn active" id="btnToggleLabels">🏷 Etiquetas</button>
+        <div class="dock-divider"></div>
+        <div class="shape-selector" id="shapeSelector">
+            <span class="shape-label">FORMA:</span>
+            <button class="shape-btn active" data-shape="brain" title="Hemisferios Cerebrales">🧠 Cerebro</button>
+            <button class="shape-btn" data-shape="sphere" title="Esfera Fibonacci">🌐 Esfera</button>
+            <button class="shape-btn" data-shape="solarsystem" title="Sistema Solar 3D en Órbita Kepleriana">🪐 Sistema Solar</button>
+            <button class="shape-btn" data-shape="flowergarden" title="Jardín de Flores 3D en Brisa Viva">🌸 Jardín</button>
+            <button class="shape-btn" data-shape="hexagon" title="Prisma Hexagonal 3D">⬡ Hexágono</button>
+            <button class="shape-btn" data-shape="triangle" title="Pirámide Tetraédrica 3D">🔺 Triángulo</button>
+            <button class="shape-btn" data-shape="stickman" title="Stickman Saludando en 3D">🧍 Stickman</button>
+        </div>
+        <div class="dock-divider"></div>
+        <div class="color-selector" id="colorSelector">
+            <span class="color-label">COLOR:</span>
+            <button class="color-btn" id="btnCycleColor" title="Cambiar color de los módulos entre los 5 colores del cerebro">
+                <span class="color-indicator-dot" id="colorActiveDot" style="width:10px;height:10px;border-radius:50%;background:linear-gradient(135deg, #00e5ff, #00ff9d, #c084fc, #fbbf24, #ff2a85);"></span>
+                <span id="colorThemeText">Multicolor</span>
+            </button>
+            <div class="color-dots-row">
+                <span class="palette-dot active" data-theme="default" title="Multicolor Original (5 Clústeres)" style="background:linear-gradient(135deg, #00e5ff, #00ff9d, #c084fc, #fbbf24, #ff2a85);"></span>
+                <span class="palette-dot" data-theme="cyan" title="Gama Cyan (#00e5ff)" style="background:#00e5ff; color:#00e5ff;"></span>
+                <span class="palette-dot" data-theme="neon" title="Gama Verde Neón (#00ff9d)" style="background:#00ff9d; color:#00ff9d;"></span>
+                <span class="palette-dot" data-theme="purple" title="Gama Púrpura IA (#c084fc)" style="background:#c084fc; color:#c084fc;"></span>
+                <span class="palette-dot" data-theme="amber" title="Gama Ámbar Oro (#fbbf24)" style="background:#fbbf24; color:#fbbf24;"></span>
+                <span class="palette-dot" data-theme="magenta" title="Gama Rosa Magenta (#ff2a85)" style="background:#ff2a85; color:#ff2a85;"></span>
+            </div>
+        </div>
+        <div class="dock-divider"></div>
+        <div class="scale-selector" id="scaleSelector">
+            <span class="scale-label">NODOS:</span>
+            <button class="scale-btn" data-count="300">300</button>
+            <button class="scale-btn active" data-count="1500">1.5K</button>
+            <button class="scale-btn" data-count="3000">3K</button>
+            <button class="scale-btn" data-count="5000">5K</button>
+        </div>
+        <div class="dock-divider"></div>
+        <button class="dock-btn active" id="btnSpatialAudio" title="Audio Espacial 3D Web Audio">🔊 Audio 3D: ON</button>
+        <button class="dock-btn active" id="btnToggleBokeh" title="Profundidad de Campo Óptica / Lente Macro">📷 Bokeh DoF: ON</button>
+        <button class="dock-btn" id="btnToggleConstellations" title="Modo Constelaciones / Triangulación 3D">✨ Constelaciones: OFF</button>
+        <div class="dock-divider"></div>
+        <button class="dock-btn danger" id="btnResetAll" style="color:#ff2a55;">Restaurar</button>
+    </nav>
+
+    <div class="fps-pill" id="fpsPill">60 FPS | Nodos | Sinapsis</div>
+
+    <script>
+        const CLUSTERS = [
+            { name: 'Arquitectura & Memoria C++', color: '#00e5ff', rgb: [0, 229, 255], topics: ['Punteros', 'Stack', 'Heap', 'Malloc', 'Smart Ptrs', 'Cache L1', 'Registers', 'Hex Addr', 'Memory Leak', 'Array', 'RAM Ops'] },
+            { name: 'Algoritmos & Estructuras', color: '#00ff9d', rgb: [0, 255, 157], topics: ['Binary Tree', 'A* Route', 'Dijkstra', 'QuickSort', 'Graph', 'Hash Table', 'Priority Q', 'Min-Heap', 'Conway', 'BFS/DFS', 'Big-O'] },
+            { name: 'Redes Neuronales & IA', color: '#c084fc', rgb: [192, 132, 252], topics: ['Local AI', 'JS Classifier', 'Perceptron', 'Weights', 'Embeddings', 'Inference', 'Text NLP', 'Heuristics', 'Agents', 'Decisions'] },
+            { name: 'Bases de Datos & Cloud', color: '#fbbf24', rgb: [251, 191, 36], topics: ['Supabase', 'Sync Local', 'PowerSync', 'SQL', 'JSON Store', 'REST API', 'OAuth', 'B-Tree', 'Offline First', 'ACID', 'WebSockets'] },
+            { name: 'Gráficos 3D & Shaders', color: '#ff2a85', rgb: [255, 42, 133], topics: ['WebGL', 'Matrices 3D', 'Orbit Cam', 'Raycasting', 'Particles', 'Additive', '60 FPS', 'Web Workers', 'Perspective', 'Z-Buffer', 'Lerp'] }
+        ];
+
+        // 5 PALETAS TEMÁTICAS ARMONIOSAS BASADAS EN LOS 5 COLORES DEL CEREBRO
+        const COLOR_THEMES = {
+            default: {
+                name: 'Multicolor',
+                type: 'multi',
+                palette: [
+                    { name: 'C++ Memoria', color: '#00e5ff', rgb: [0, 229, 255] },
+                    { name: 'Algoritmos', color: '#00ff9d', rgb: [0, 255, 157] },
+                    { name: 'Redes IA', color: '#c084fc', rgb: [192, 132, 252] },
+                    { name: 'Cloud & DB', color: '#fbbf24', rgb: [251, 191, 36] },
+                    { name: 'Shaders 3D', color: '#ff2a85', rgb: [255, 42, 133] }
+                ]
+            },
+            cyan: {
+                name: 'Cyan Eléctrico',
+                type: 'mono',
+                mainColor: '#00e5ff',
+                palette: [
+                    { name: 'Cyan Puro', color: '#00e5ff', rgb: [0, 229, 255] },
+                    { name: 'Celeste Neón', color: '#38bdf8', rgb: [56, 189, 248] },
+                    { name: 'Turquesa Glaciar', color: '#06b6d4', rgb: [6, 182, 212] },
+                    { name: 'Aguamarina', color: '#67e8f9', rgb: [103, 232, 249] },
+                    { name: 'Azul Cósmico', color: '#0284c7', rgb: [2, 132, 199] }
+                ]
+            },
+            neon: {
+                name: 'Verde Neón',
+                type: 'mono',
+                mainColor: '#00ff9d',
+                palette: [
+                    { name: 'Verde Neón', color: '#00ff9d', rgb: [0, 255, 157] },
+                    { name: 'Esmeralda', color: '#10b981', rgb: [16, 185, 129] },
+                    { name: 'Verde Menta', color: '#4ade80', rgb: [74, 222, 128] },
+                    { name: 'Lima Eléctrico', color: '#a3e635', rgb: [163, 230, 53] },
+                    { name: 'Jade Profundo', color: '#059669', rgb: [5, 150, 105] }
+                ]
+            },
+            purple: {
+                name: 'Púrpura IA',
+                type: 'mono',
+                mainColor: '#c084fc',
+                palette: [
+                    { name: 'Púrpura IA', color: '#c084fc', rgb: [192, 132, 252] },
+                    { name: 'Violeta Sináptico', color: '#a855f7', rgb: [168, 85, 247] },
+                    { name: 'Índigo Cósmico', color: '#818cf8', rgb: [129, 140, 248] },
+                    { name: 'Orquídea Neón', color: '#e879f9', rgb: [232, 121, 249] },
+                    { name: 'Púrpura Imperial', color: '#7c3aed', rgb: [124, 58, 237] }
+                ]
+            },
+            amber: {
+                name: 'Ámbar Oro',
+                type: 'mono',
+                mainColor: '#fbbf24',
+                palette: [
+                    { name: 'Ámbar Oro', color: '#fbbf24', rgb: [251, 191, 36] },
+                    { name: 'Naranja Fuego', color: '#f59e0b', rgb: [245, 158, 11] },
+                    { name: 'Amarillo Solar', color: '#fde047', rgb: [253, 224, 71] },
+                    { name: 'Cobre Radiante', color: '#ea580c', rgb: [234, 88, 12] },
+                    { name: 'Dorado Estelar', color: '#fb923c', rgb: [251, 146, 60] }
+                ]
+            },
+            magenta: {
+                name: 'Rosa Magenta',
+                type: 'mono',
+                mainColor: '#ff2a85',
+                palette: [
+                    { name: 'Magenta Láser', color: '#ff2a85', rgb: [255, 42, 133] },
+                    { name: 'Carmesí Neón', color: '#f43f5e', rgb: [244, 63, 94] },
+                    { name: 'Rosa Eléctrico', color: '#ec4899', rgb: [236, 72, 153] },
+                    { name: 'Coral Brillante', color: '#fb7185', rgb: [251, 113, 133] },
+                    { name: 'Rubí Cuántico', color: '#e11d48', rgb: [225, 29, 72] }
+                ]
+            }
+        };
+
+        /**
+         * MOTOR DE AUDIO ESPACIAL 3D (WEB AUDIO API)
+         * Genera tonos resonantes puros con paneo estéreo 3D y atenuación de distancia
+         */
+        class SpatialBrainAudio {
+            constructor() {
+                this.ctx = null;
+                this.enabled = true;
+                this.lastChimeTime = 0;
+            }
+            init() {
+                if (!this.ctx && typeof window !== 'undefined') {
+                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                    if (AudioCtx) {
+                        try { this.ctx = new AudioCtx(); } catch (e) {}
+                    }
+                }
+                if (this.ctx && this.ctx.state === 'suspended') {
+                    this.ctx.resume().catch(() => {});
+                }
+            }
+            playSynapse(panX, depthScale, clusterIdx, isFocus = false) {
+                if (!this.enabled) return;
+                this.init();
+                if (!this.ctx) return;
+
+                const now = this.ctx.currentTime;
+                if (!isFocus && (now - this.lastChimeTime < 0.08)) return;
+                this.lastChimeTime = now;
+
+                try {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+
+                    const baseFreqs = [528.0, 587.33, 659.25, 783.99, 880.0];
+                    const octave = isFocus ? 1.0 : (Math.random() > 0.5 ? 1.0 : 0.5);
+                    const freq = (baseFreqs[clusterIdx % baseFreqs.length] || 528.0) * octave;
+                    osc.frequency.setValueAtTime(freq, now);
+                    osc.type = isFocus ? 'triangle' : 'sine';
+
+                    if (this.ctx.createStereoPanner) {
+                        const panner = this.ctx.createStereoPanner();
+                        panner.pan.setValueAtTime(Math.max(-1, Math.min(1, panX || 0)), now);
+                        osc.connect(gain);
+                        gain.connect(panner);
+                        panner.connect(this.ctx.destination);
+                    } else {
+                        osc.connect(gain);
+                        gain.connect(this.ctx.destination);
+                    }
+
+                    const maxVol = isFocus ? 0.16 : Math.max(0.015, Math.min(0.08, (depthScale || 1.0) * 0.06));
+                    gain.gain.setValueAtTime(0.0001, now);
+                    gain.gain.exponentialRampToValueAtTime(maxVol, now + 0.02);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, now + (isFocus ? 0.6 : 0.32));
+
+                    osc.start(now);
+                    osc.stop(now + (isFocus ? 0.62 : 0.35));
+                } catch (e) {}
+            }
+        }
+
+        class SecondBrainMassiveEngine {
+            constructor() {
+                this.canvas = document.getElementById('webglCanvas');
+                this.ctx = this.canvas.getContext('2d', { alpha: false });
+
+                this.width = window.innerWidth;
+                this.height = window.innerHeight;
+                this.canvas.width = this.width;
+                this.canvas.height = this.height;
+
+                this.rotX = 0.22;
+                this.rotY = -0.5;
+                this.velRotX = 0.0;
+                this.velRotY = 0.0;
+                this.zoom = 1.0;
+                this.targetZoom = 1.0;
+                this.fov = 760;
+
+                this.focusX = 0;
+                this.focusY = 0;
+                this.focusZ = 0;
+                this.targetFocusX = 0;
+                this.targetFocusY = 0;
+                this.targetFocusZ = 0;
+
+                this.autoRotate = true;
+                this.orbitSpeed = 0.0028;
+                this.showLabels = true;
+                this.layoutMode = 'brain';
+                this.colorTheme = localStorage.getItem('second_brain_colortheme') || 'default';
+                this.activeClusterFilter = 'all';
+                this.hoveredNode = null;
+                this.selectedNode = null;
+
+                this.linkModeActive = false;
+                this.linkSourceNode = null;
+
+                this.isDragging = false;
+                this.dragMoved = false;
+                this.lastMouseX = 0;
+                this.lastMouseY = 0;
+                this.mouseX = -1000;
+                this.mouseY = -1000;
+
+                this.nodes = [];
+                this.edges = [];
+                this.pulses = [];
+                this.ambientStars = [];
+                this.glowSprites = [];
+
+                this.frameCount = 0;
+                this.lastFpsTime = performance.now();
+                this.lastFocusPulseTime = 0;
+                this.currentFps = 60;
+
+                // Audio Espacial 3D, Bokeh y Constelaciones (Fase 2)
+                this.audio = new SpatialBrainAudio();
+                this.bokehDofEnabled = true;
+                this.constellationsEnabled = false;
+
+                // Cache de buffers de trazado para Zero Garbage Collection (Fase 1)
+                this.cachedClusterPaths = [[], [], [], [], []];
+                this.cachedDimmedPath = [];
+                this.cachedDirectHighlightEdges = [];
+
+                // Densidad de nodos configurable (300, 1500, 3000, 5000)
+                this.nodeCount = 1500;
+                const savedScale = parseInt(localStorage.getItem('second_brain_scale'), 10);
+                if ([300, 1500, 3000, 5000].includes(savedScale)) {
+                    this.nodeCount = savedScale;
+                }
+
+                this.bakeGlowSprites();
+                this.initAmbientStars();
+                this.loadOrBuildGraph();
+                this.bindEvents();
+                this.updateScaleUI();
+                this.updateColorThemeUI();
+                this.renderClustersLegend();
+            }
+
+            getCurrentClusterPalette() {
+                const theme = COLOR_THEMES[this.colorTheme] || COLOR_THEMES.default;
+                return theme.palette;
+            }
+
+            cycleColorTheme() {
+                const themeKeys = ['default', 'cyan', 'neon', 'purple', 'amber', 'magenta'];
+                const curIdx = themeKeys.indexOf(this.colorTheme);
+                const nextIdx = (curIdx + 1) % themeKeys.length;
+                this.setColorTheme(themeKeys[nextIdx]);
+            }
+
+            setColorTheme(themeKey) {
+                if (!COLOR_THEMES[themeKey]) themeKey = 'default';
+                this.colorTheme = themeKey;
+                try {
+                    localStorage.setItem('second_brain_colortheme', themeKey);
+                } catch (e) {}
+
+                this.bakeGlowSprites();
+                this.renderClustersLegend();
+                this.updateColorThemeUI();
+                this.triggerSynapticBurst();
+            }
+
+            updateColorThemeUI() {
+                const theme = COLOR_THEMES[this.colorTheme] || COLOR_THEMES.default;
+                const textEl = document.getElementById('colorThemeText');
+                const dotEl = document.getElementById('colorActiveDot');
+                if (textEl) textEl.textContent = theme.name;
+                if (dotEl) {
+                    if (theme.type === 'multi') {
+                        dotEl.style.background = 'linear-gradient(135deg, #00e5ff, #00ff9d, #c084fc, #fbbf24, #ff2a85)';
+                        dotEl.style.boxShadow = '0 0 8px rgba(0, 229, 255, 0.6)';
+                    } else {
+                        dotEl.style.background = theme.mainColor;
+                        dotEl.style.boxShadow = `0 0 10px ${theme.mainColor}`;
+                    }
+                }
+                document.querySelectorAll('.palette-dot').forEach(dot => {
+                    dot.classList.toggle('active', dot.dataset.theme === this.colorTheme);
+                });
+            }
+
+            renderClustersLegend() {
+                const palette = this.getCurrentClusterPalette();
+                for (let i = 0; i < 5; i++) {
+                    const item = document.querySelector(`.cluster-item[data-cluster="${i}"]`);
+                    if (item) {
+                        const dot = item.querySelector('.dot');
+                        if (dot && palette[i]) {
+                            dot.style.color = palette[i].color;
+                            dot.style.background = palette[i].color;
+                            dot.style.boxShadow = `0 0 8px ${palette[i].color}`;
+                        }
+                    }
+                }
+            }
+
+            bakeGlowSprites() {
+                const palette = this.getCurrentClusterPalette();
+                this.glowSprites = palette.map(cluster => {
+                    const size = 96;
+                    const half = size / 2;
+                    const c = document.createElement('canvas');
+                    c.width = size;
+                    c.height = size;
+                    const gCtx = c.getContext('2d');
+
+                    const [r, g, b] = cluster.rgb;
+                    const grad = gCtx.createRadialGradient(half, half, 1, half, half, half);
+                    grad.addColorStop(0.0, '#ffffff');
+                    grad.addColorStop(0.18, `rgba(${r}, ${g}, ${b}, 1)`);
+                    grad.addColorStop(0.45, `rgba(${r}, ${g}, ${b}, 0.35)`);
+                    grad.addColorStop(0.8, `rgba(${r}, ${g}, ${b}, 0.05)`);
+                    grad.addColorStop(1.0, 'rgba(0, 0, 0, 0)');
+
+                    gCtx.fillStyle = grad;
+                    gCtx.fillRect(0, 0, size, size);
+                    return c;
+                });
+            }
+
+            initAmbientStars() {
+                this.ambientStars = [];
+                for (let i = 0; i < 260; i++) {
+                    this.ambientStars.push({
+                        x: (Math.random() - 0.5) * 2200,
+                        y: (Math.random() - 0.5) * 1500,
+                        z: (Math.random() - 0.5) * 2200,
+                        size: Math.random() * 1.6 + 0.4,
+                        alpha: Math.random() * 0.35 + 0.1
+                    });
+                }
+            }
+
+            setNodeCount(count) {
+                count = parseInt(count, 10);
+                if (![300, 1500, 3000, 5000].includes(count)) return;
+                if (this.nodeCount === count && this.nodes.length === count) return;
+
+                this.nodeCount = count;
+                try {
+                    localStorage.setItem('second_brain_scale', count);
+                } catch (e) {}
+
+                this.updateScaleUI();
+                this.focusOnNode(null);
+                this.loadOrBuildGraph();
+                this.triggerSynapticBurst();
+            }
+
+            updateScaleUI() {
+                document.querySelectorAll('.scale-btn').forEach(btn => {
+                    btn.classList.toggle('active', parseInt(btn.dataset.count, 10) === this.nodeCount);
+                });
+            }
+
+            setLayoutMode(mode) {
+                if (!['brain', 'sphere', 'hexagon', 'triangle', 'stickman', 'solarsystem', 'flowergarden'].includes(mode)) return;
+                this.layoutMode = mode;
+                document.querySelectorAll('.shape-btn').forEach(btn => {
+                    btn.classList.toggle('active', btn.dataset.shape === mode);
+                });
+                this.triggerSynapticBurst();
+            }
+
+            loadOrBuildGraph() {
+                const storageKey = `second_brain_massive_v7_${this.nodeCount}`;
+                const savedData = localStorage.getItem(storageKey);
+                if (savedData) {
+                    try {
+                        const parsed = JSON.parse(savedData);
+                        if (parsed.nodes && parsed.nodes.length === this.nodeCount) {
+                            this.nodes = parsed.nodes;
+                            this.edges = parsed.edges;
+                            this.pulses = [];
+
+                            let hasInvalidNode = false;
+                            for (let i = 0; i < this.nodes.length; i++) {
+                                const n = this.nodes[i];
+                                if (!n || isNaN(n.x) || isNaN(n.y) || isNaN(n.z) || !n.brainPos) {
+                                    hasInvalidNode = true;
+                                    break;
+                                }
+                                if (!n.hexagonPos) n.hexagonPos = this.computeHexagonPosition(i, this.nodes.length, n.clusterIdx);
+                                if (!n.trianglePos) n.trianglePos = this.computeTrianglePosition(i, this.nodes.length, n.clusterIdx);
+                                if (!n.stickmanPos || !n.stickmanBase) {
+                                    const st = this.computeStickmanPosition(i, this.nodes.length, n.clusterIdx);
+                                    n.stickmanPos = { x: st.x, y: st.y, z: st.z };
+                                    n.stickmanBase = { x: st.x, y: st.y, z: st.z };
+                                    n.isWavingArm = !!st.isWavingArm;
+                                    n.waveFactor = st.waveFactor || 0;
+                                }
+                                if (!n.solarPos || !n.solarData) {
+                                    const sol = this.computeSolarSystemPosition(i, this.nodes.length, n.clusterIdx);
+                                    n.solarPos = { x: sol.x, y: sol.y, z: sol.z };
+                                    n.solarData = sol;
+                                }
+                                if (!n.flowerPos || !n.flowerData) {
+                                    const fl = this.computeFlowerGardenPosition(i, this.nodes.length, n.clusterIdx);
+                                    n.flowerPos = { x: fl.x, y: fl.y, z: fl.z };
+                                    n.flowerData = fl;
+                                }
+                            }
+
+                            if (hasInvalidNode) {
+                                this.buildDefaultMassiveNetwork();
+                                return;
+                            }
+
+                            this.updateCountersHUD();
+                            return;
+                        }
+                    } catch (e) {
+                        console.error('Error cargando persistencia masiva.');
+                    }
+                }
+                this.buildDefaultMassiveNetwork();
+            }
+
+            saveGraphToStorage() {
+                const storageKey = `second_brain_massive_v7_${this.nodeCount}`;
+                const dataToSave = {
+                    nodeCount: this.nodeCount,
+                    nodes: this.nodes.map(n => ({
+                        id: n.id,
+                        label: n.label,
+                        clusterIdx: n.clusterIdx,
+                        color: n.color,
+                        rgb: n.rgb,
+                        isHub: n.isHub,
+                        baseRadius: n.baseRadius,
+                        x: n.x, y: n.y, z: n.z,
+                        brainPos: n.brainPos,
+                        spherePos: n.spherePos,
+                        hexagonPos: n.hexagonPos,
+                        trianglePos: n.trianglePos,
+                        stickmanPos: n.stickmanPos,
+                        stickmanBase: n.stickmanBase,
+                        isWavingArm: n.isWavingArm,
+                        waveFactor: n.waveFactor,
+                        solarPos: n.solarPos,
+                        solarData: n.solarData,
+                        flowerPos: n.flowerPos,
+                        flowerData: n.flowerData,
+                        neighbors: n.neighbors
+                    })),
+                    edges: this.edges
+                };
+                try {
+                    localStorage.setItem(storageKey, JSON.stringify(dataToSave));
+                } catch (e) {
+                    console.warn('Almacenamiento local saturado para esta escala masiva.');
+                }
+            }
+
+            /**
+             * Generación masiva algorítmica con ajuste de densidad dinámica y particionamiento espacial
+             */
+            buildDefaultMassiveNetwork() {
+                this.nodes = [];
+                this.edges = [];
+                this.pulses = [];
+
+                const totalNodes = this.nodeCount;
+                const hubCount = Math.max(12, Math.floor(totalNodes * 0.025));
+                const radiusScale = totalNodes === 300 ? 1.35 : (totalNodes >= 3000 ? (totalNodes === 3000 ? 0.75 : 0.58) : 1.0);
+
+                for (let i = 0; i < totalNodes; i++) {
+                    const clusterIdx = i % CLUSTERS.length;
+                    const cluster = CLUSTERS[clusterIdx];
+                    const topicList = cluster.topics;
+                    const label = `${topicList[i % topicList.length]} v${Math.floor(i / topicList.length) + 1}`;
+                    const isHub = (i < hubCount);
+
+                    const posBrain = this.computeBrainPosition(i, totalNodes, clusterIdx);
+                    const posSphere = this.computeSpherePosition(i, totalNodes, clusterIdx);
+                    const posHexagon = this.computeHexagonPosition(i, totalNodes, clusterIdx);
+                    const posTriangle = this.computeTrianglePosition(i, totalNodes, clusterIdx);
+                    const posStickman = this.computeStickmanPosition(i, totalNodes, clusterIdx);
+                    const posSolar = this.computeSolarSystemPosition(i, totalNodes, clusterIdx);
+                    const posFlower = this.computeFlowerGardenPosition(i, totalNodes, clusterIdx);
+
+                    this.nodes.push({
+                        id: i,
+                        label,
+                        clusterIdx,
+                        color: cluster.color,
+                        rgb: cluster.rgb,
+                        isHub,
+                        baseRadius: (isHub ? 22 : (7.5 + (i % 3) * 1.2)) * radiusScale,
+                        x: posBrain.x, y: posBrain.y, z: posBrain.z,
+                        brainPos: posBrain,
+                        spherePos: posSphere,
+                        hexagonPos: posHexagon,
+                        trianglePos: posTriangle,
+                        stickmanPos: { x: posStickman.x, y: posStickman.y, z: posStickman.z },
+                        stickmanBase: { x: posStickman.x, y: posStickman.y, z: posStickman.z },
+                        isWavingArm: posStickman.isWavingArm,
+                        waveFactor: posStickman.waveFactor || 0,
+                        solarPos: { x: posSolar.x, y: posSolar.y, z: posSolar.z },
+                        solarData: posSolar,
+                        flowerPos: { x: posFlower.x, y: posFlower.y, z: posFlower.z },
+                        flowerData: posFlower,
+                        sx: 0, sy: 0, sz: 0, scale: 1,
+                        neighbors: []
+                    });
+                }
+
+                // Particionamiento espacial real en rejilla 3D uniforme: O(N) en lugar de O(N^2)
+                this.buildSpatialConnections(totalNodes);
+
+                const initialPulses = Math.min(100, Math.max(25, Math.floor(totalNodes * 0.035)));
+                for (let i = 0; i < initialPulses; i++) {
+                    this.spawnSynapticPulse();
+                }
+
+                this.saveGraphToStorage();
+                this.updateCountersHUD();
+            }
+
+            /**
+             * PARTITIONING ESPACIAL 3D:
+             * Divide el espacio en cubos de celda fija y busca vecinos únicamente en las 27 celdas adyacentes.
+             * Reduce la complejidad de O(N^2) a O(N * K), permitiendo conectar 5,000 nodos en menos de 30ms.
+             */
+            buildSpatialConnections(totalNodes) {
+                const cellSize = 135;
+                const grid = new Map();
+                const getCellKey = (cx, cy, cz) => `${cx},${cy},${cz}`;
+
+                for (let i = 0; i < totalNodes; i++) {
+                    const n = this.nodes[i];
+                    const cx = Math.floor(n.x / cellSize);
+                    const cy = Math.floor(n.y / cellSize);
+                    const cz = Math.floor(n.z / cellSize);
+                    const key = getCellKey(cx, cy, cz);
+                    let list = grid.get(key);
+                    if (!list) {
+                        list = [];
+                        grid.set(key, list);
+                    }
+                    list.push(i);
+                }
+
+                for (let i = 0; i < totalNodes; i++) {
+                    const nA = this.nodes[i];
+                    const linkTarget = nA.isHub ? 4 : 2;
+                    if (nA.neighbors.length >= linkTarget) continue;
+
+                    const cx = Math.floor(nA.x / cellSize);
+                    const cy = Math.floor(nA.y / cellSize);
+                    const cz = Math.floor(nA.z / cellSize);
+
+                    const candidates = [];
+
+                    for (let ox = -1; ox <= 1; ox++) {
+                        for (let oy = -1; oy <= 1; oy++) {
+                            for (let oz = -1; oz <= 1; oz++) {
+                                const cell = grid.get(getCellKey(cx + ox, cy + oy, cz + oz));
+                                if (cell) {
+                                    for (let c = 0; c < cell.length; c++) {
+                                        const j = cell[c];
+                                        if (j !== i && !nA.neighbors.includes(j)) {
+                                            candidates.push(j);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Respaldo intra-clúster si la vecindad inmediata está despoblada
+                    if (candidates.length < linkTarget) {
+                        const step = Math.max(1, Math.floor(totalNodes / 80));
+                        for (let j = nA.clusterIdx; j < totalNodes && candidates.length < 35; j += step) {
+                            if (j !== i && !nA.neighbors.includes(j)) candidates.push(j);
+                        }
+                    }
+
+                    const scored = [];
+                    for (let k = 0; k < candidates.length; k++) {
+                        const j = candidates[k];
+                        const nB = this.nodes[j];
+                        const dx = nA.x - nB.x;
+                        const dy = nA.y - nB.y;
+                        const dz = nA.z - nB.z;
+                        let distSq = dx * dx + dy * dy + dz * dz;
+                        if (nA.clusterIdx === nB.clusterIdx) distSq *= 0.25;
+                        scored.push({ id: j, distSq });
+                    }
+
+                    scored.sort((a, b) => a.distSq - b.distSq);
+
+                    const needed = linkTarget - nA.neighbors.length;
+                    for (let k = 0; k < Math.min(needed, scored.length); k++) {
+                        const targetId = scored[k].id;
+                        nA.neighbors.push(targetId);
+                        this.nodes[targetId].neighbors.push(i);
+                        this.edges.push({ a: i, b: targetId });
+                    }
+                }
+            }
+
+            connectNodeToNearest(nodeId, linkCount = 2) {
+                const nA = this.nodes[nodeId];
+                if (!nA) return;
+                const scored = [];
+
+                for (let j = 0; j < this.nodes.length; j++) {
+                    if (nodeId === j) continue;
+                    const nB = this.nodes[j];
+                    const dx = nA.x - nB.x;
+                    const dy = nA.y - nB.y;
+                    const dz = nA.z - nB.z;
+                    let distSq = dx * dx + dy * dy + dz * dz;
+                    if (nA.clusterIdx === nB.clusterIdx) distSq *= 0.25;
+                    scored.push({ id: j, distSq });
+                }
+
+                scored.sort((a, b) => a.distSq - b.distSq);
+
+                for (let k = 0; k < Math.min(linkCount, scored.length); k++) {
+                    const targetId = scored[k].id;
+                    if (!nA.neighbors.includes(targetId)) {
+                        nA.neighbors.push(targetId);
+                        this.nodes[targetId].neighbors.push(nodeId);
+                        this.edges.push({ a: nodeId, b: targetId });
+                    }
+                }
+            }
+
+            addCustomNodeLive(customLabel, clusterIndex) {
+                const cIdx = parseInt(clusterIndex, 10) || 0;
+                const cluster = CLUSTERS[cIdx];
+                const newId = this.nodes.length;
+
+                const posBrain = this.computeBrainPosition(newId, newId + 10, cIdx);
+                const posSphere = this.computeSpherePosition(newId, newId + 10, cIdx);
+                const posHexagon = this.computeHexagonPosition(newId, newId + 10, cIdx);
+                const posTriangle = this.computeTrianglePosition(newId, newId + 10, cIdx);
+                const posStickman = this.computeStickmanPosition(newId, newId + 10, cIdx);
+                const posSolar = this.computeSolarSystemPosition(newId, newId + 10, cIdx);
+                const posFlower = this.computeFlowerGardenPosition(newId, newId + 10, cIdx);
+                const radiusScale = this.nodeCount === 300 ? 1.35 : (this.nodeCount >= 3000 ? (this.nodeCount === 3000 ? 0.75 : 0.58) : 1.0);
+
+                const newNode = {
+                    id: newId,
+                    label: customLabel.trim(),
+                    clusterIdx: cIdx,
+                    color: cluster.color,
+                    rgb: cluster.rgb,
+                    isHub: true,
+                    baseRadius: 24 * radiusScale,
+                    x: posBrain.x * 1.15,
+                    y: posBrain.y * 1.15,
+                    z: posBrain.z * 1.15,
+                    brainPos: posBrain,
+                    spherePos: posSphere,
+                    hexagonPos: posHexagon,
+                    trianglePos: posTriangle,
+                    stickmanPos: { x: posStickman.x, y: posStickman.y, z: posStickman.z },
+                    stickmanBase: { x: posStickman.x, y: posStickman.y, z: posStickman.z },
+                    isWavingArm: posStickman.isWavingArm,
+                    waveFactor: posStickman.waveFactor || 0,
+                    solarPos: { x: posSolar.x, y: posSolar.y, z: posSolar.z },
+                    solarData: posSolar,
+                    flowerPos: { x: posFlower.x, y: posFlower.y, z: posFlower.z },
+                    flowerData: posFlower,
+                    sx: 0, sy: 0, sz: 0, scale: 1,
+                    neighbors: []
+                };
+
+                this.nodes.push(newNode);
+                this.connectNodeToNearest(newId, 4);
+                this.saveGraphToStorage();
+                this.updateCountersHUD();
+
+                this.activeClusterFilter = 'all';
+                document.querySelectorAll('.cluster-item').forEach(el => el.classList.remove('active-cluster'));
+                document.querySelector('.cluster-item[data-cluster="all"]').classList.add('active-cluster');
+
+                this.focusOnNode(newNode);
+            }
+
+            manualLinkNodes(idA, idB) {
+                if (idA === idB) return false;
+                const nA = this.nodes[idA];
+                const nB = this.nodes[idB];
+                if (!nA || !nB) return false;
+
+                const alreadyLinked = nA.neighbors.includes(idB);
+                if (!alreadyLinked) {
+                    nA.neighbors.push(idB);
+                    nB.neighbors.push(idA);
+                    this.edges.push({ a: idA, b: idB });
+                    this.saveGraphToStorage();
+                    this.triggerSynapticBurst(idA);
+                    return true;
+                }
+                return false;
+            }
+
+            updateCountersHUD() {
+                const subtitle = document.getElementById('headerSubtitle');
+                if (subtitle) {
+                    subtitle.textContent = `Escala Dinámica (${this.nodes.length.toLocaleString()} Nodos) • Particionamiento Espacial • Conexión Manual`;
+                }
+                const legendTotal = document.getElementById('legendTotalText');
+                if (legendTotal) {
+                    legendTotal.textContent = `Red Masiva (${this.nodes.length.toLocaleString()} Nodos)`;
+                }
+                const fpsPill = document.getElementById('fpsPill');
+                if (fpsPill) {
+                    fpsPill.textContent = `${this.currentFps} FPS | ${this.nodes.length.toLocaleString()} Nodos | ${this.edges.length.toLocaleString()} Sinapsis`;
+                }
+            }
+
+            computeBrainPosition(index, total, clusterIdx) {
+                const u = Math.random();
+                const v = Math.random();
+                const theta = u * 2.0 * Math.PI;
+                const phi = Math.acos(2.0 * v - 1.0);
+                const scaleFactor = total >= 3000 ? 1.15 : 1.0;
+                const r = (220 + Math.cbrt(Math.random()) * 160) * scaleFactor;
+
+                let x = r * Math.sin(phi) * Math.cos(theta);
+                let y = r * Math.sin(phi) * Math.sin(theta) * 0.75;
+                let z = r * Math.cos(phi) * 1.3;
+
+                const hemiSign = (clusterIdx % 2 === 0) ? 1 : -1;
+                x = Math.abs(x) * 0.75 * hemiSign + hemiSign * (55 * scaleFactor);
+
+                const clusterOffsets = [
+                    { x: -45, y: -50, z: 90 },
+                    { x: 50, y: -40, z: 75 },
+                    { x: 0, y: 15, z: -100 },
+                    { x: -65, y: 55, z: 0 },
+                    { x: 65, y: 55, z: -15 }
+                ];
+                const off = clusterOffsets[clusterIdx];
+                return { x: x + off.x, y: y + off.y, z: z + off.z };
+            }
+
+            computeSpherePosition(index, total, clusterIdx) {
+                const phi = Math.acos(1 - 2 * ((index % total) + 0.5) / total);
+                const theta = Math.PI * (1 + Math.sqrt(5)) * index;
+                const radius = (total >= 3000 ? 430 : 380) + (clusterIdx % 2) * 45;
+
+                return {
+                    x: radius * Math.sin(phi) * Math.cos(theta),
+                    y: radius * Math.sin(phi) * Math.sin(theta),
+                    z: radius * Math.cos(phi)
+                };
+            }
+
+            /**
+             * 1. HEXÁGONO 3D: Prisma hexagonal multicapa concéntrico con torsión axial
+             */
+            computeHexagonPosition(index, total, clusterIdx) {
+                const scaleFactor = total >= 3000 ? 1.15 : 1.0;
+                const ring = index % 5;
+                const radius = (150 + ring * 42) * scaleFactor;
+                const side = index % 6;
+                const t = ((index * 7) % 100) / 100;
+
+                const angleA = side * (Math.PI / 3);
+                const angleB = ((side + 1) % 6) * (Math.PI / 3);
+
+                const xA = radius * Math.cos(angleA);
+                const yA = radius * Math.sin(angleA);
+                const xB = radius * Math.cos(angleB);
+                const yB = radius * Math.sin(angleB);
+
+                let x = xA + (xB - xA) * t + (Math.random() - 0.5) * 12;
+                let y = yA + (yB - yA) * t + (Math.random() - 0.5) * 12;
+                let z = (((index * 13) % 360) - 180) * scaleFactor + (Math.random() - 0.5) * 10;
+
+                const twist = z * 0.0012;
+                const rx = x * Math.cos(twist) - y * Math.sin(twist);
+                const ry = x * Math.sin(twist) + y * Math.cos(twist);
+
+                return { x: rx, y: ry, z: z };
+            }
+
+            /**
+             * 2. TRIÁNGULO 3D: Tetraedro regular en 3D con distribución baricéntrica
+             */
+            computeTrianglePosition(index, total, clusterIdx) {
+                const scaleFactor = total >= 3000 ? 1.15 : 1.0;
+                const verts = [
+                    { x: 0, y: -270 * scaleFactor, z: 0 },
+                    { x: 260 * scaleFactor, y: 160 * scaleFactor, z: -150 * scaleFactor },
+                    { x: -260 * scaleFactor, y: 160 * scaleFactor, z: -150 * scaleFactor },
+                    { x: 0, y: 160 * scaleFactor, z: 270 * scaleFactor }
+                ];
+
+                const faceIdx = index % 4;
+                const fVerts = [
+                    [verts[0], verts[1], verts[2]],
+                    [verts[0], verts[2], verts[3]],
+                    [verts[0], verts[3], verts[1]],
+                    [verts[1], verts[2], verts[3]]
+                ][faceIdx];
+
+                const r1 = Math.sqrt(((index * 19) % 1000) / 1000);
+                const r2 = ((index * 37) % 1000) / 1000;
+                const u = 1 - r1;
+                const v = r1 * (1 - r2);
+                const w = r1 * r2;
+
+                const A = fVerts[0], B = fVerts[1], C = fVerts[2];
+                const px = u * A.x + v * B.x + w * C.x + (Math.random() - 0.5) * 14;
+                const py = u * A.y + v * B.y + w * C.y + (Math.random() - 0.5) * 14;
+                const pz = u * A.z + v * B.z + w * C.z + (Math.random() - 0.5) * 14;
+
+                return { x: px, y: py, z: pz };
+            }
+
+            /**
+             * 3. STICKMAN 3D: Muñeco 3D anatómico con brazo derecho animado saludando
+             */
+            computeStickmanPosition(index, total, clusterIdx) {
+                const scaleFactor = total >= 3000 ? 1.15 : 1.0;
+                const fr = index / total;
+
+                let x = 0, y = 0, z = 0;
+                let isWavingArm = false;
+                let waveFactor = 0;
+
+                if (fr < 0.22) {
+                    // Cabeza esférica
+                    const hTheta = Math.random() * Math.PI * 2;
+                    const hPhi = Math.acos(2 * Math.random() - 1);
+                    const hRadius = (45 + Math.random() * 8) * scaleFactor;
+                    x = hRadius * Math.sin(hPhi) * Math.cos(hTheta);
+                    y = -215 * scaleFactor + hRadius * Math.cos(hPhi);
+                    z = hRadius * Math.sin(hPhi) * Math.sin(hTheta) * 0.8;
+                } else if (fr < 0.44) {
+                    // Columna / Torso
+                    const t = (fr - 0.22) / 0.22;
+                    x = (Math.random() - 0.5) * 18;
+                    y = (-170 + t * 195) * scaleFactor;
+                    z = (Math.random() - 0.5) * 18;
+                } else if (fr < 0.58) {
+                    // Pierna izquierda
+                    const t = (fr - 0.44) / 0.14;
+                    const p1 = { x: -10 * scaleFactor, y: 25 * scaleFactor, z: 0 };
+                    const p2 = { x: -50 * scaleFactor, y: 135 * scaleFactor, z: 12 * scaleFactor };
+                    const p3 = { x: -80 * scaleFactor, y: 250 * scaleFactor, z: -12 * scaleFactor };
+                    if (t < 0.5) {
+                        const st = t / 0.5;
+                        x = p1.x + (p2.x - p1.x) * st;
+                        y = p1.y + (p2.y - p1.y) * st;
+                        z = p1.z + (p2.z - p1.z) * st;
+                    } else {
+                        const st = (t - 0.5) / 0.5;
+                        x = p2.x + (p3.x - p2.x) * st;
+                        y = p2.y + (p3.y - p2.y) * st;
+                        z = p2.z + (p3.z - p2.z) * st;
+                    }
+                    x += (Math.random() - 0.5) * 14;
+                    y += (Math.random() - 0.5) * 14;
+                    z += (Math.random() - 0.5) * 14;
+                } else if (fr < 0.72) {
+                    // Pierna derecha
+                    const t = (fr - 0.58) / 0.14;
+                    const p1 = { x: 10 * scaleFactor, y: 25 * scaleFactor, z: 0 };
+                    const p2 = { x: 50 * scaleFactor, y: 135 * scaleFactor, z: 12 * scaleFactor };
+                    const p3 = { x: 80 * scaleFactor, y: 250 * scaleFactor, z: -12 * scaleFactor };
+                    if (t < 0.5) {
+                        const st = t / 0.5;
+                        x = p1.x + (p2.x - p1.x) * st;
+                        y = p1.y + (p2.y - p1.y) * st;
+                        z = p1.z + (p2.z - p1.z) * st;
+                    } else {
+                        const st = (t - 0.5) / 0.5;
+                        x = p2.x + (p3.x - p2.x) * st;
+                        y = p2.y + (p3.y - p2.y) * st;
+                        z = p2.z + (p3.z - p2.z) * st;
+                    }
+                    x += (Math.random() - 0.5) * 14;
+                    y += (Math.random() - 0.5) * 14;
+                    z += (Math.random() - 0.5) * 14;
+                } else if (fr < 0.85) {
+                    // Brazo izquierdo en reposo
+                    const t = (fr - 0.72) / 0.13;
+                    const p1 = { x: -20 * scaleFactor, y: -140 * scaleFactor, z: 0 };
+                    const p2 = { x: -75 * scaleFactor, y: -70 * scaleFactor, z: 10 * scaleFactor };
+                    const p3 = { x: -125 * scaleFactor, y: 10 * scaleFactor, z: -5 * scaleFactor };
+                    if (t < 0.5) {
+                        const st = t / 0.5;
+                        x = p1.x + (p2.x - p1.x) * st;
+                        y = p1.y + (p2.y - p1.y) * st;
+                        z = p1.z + (p2.z - p1.z) * st;
+                    } else {
+                        const st = (t - 0.5) / 0.5;
+                        x = p2.x + (p3.x - p2.x) * st;
+                        y = p2.y + (p3.y - p2.y) * st;
+                        z = p2.z + (p3.z - p2.z) * st;
+                    }
+                    x += (Math.random() - 0.5) * 14;
+                    y += (Math.random() - 0.5) * 14;
+                    z += (Math.random() - 0.5) * 14;
+                } else {
+                    // Brazo derecho levantado saludando
+                    const t = (fr - 0.85) / 0.15;
+                    const p1 = { x: 20 * scaleFactor, y: -140 * scaleFactor, z: 0 };
+                    const p2 = { x: 70 * scaleFactor, y: -160 * scaleFactor, z: 20 * scaleFactor };
+                    const p3 = { x: 125 * scaleFactor, y: -245 * scaleFactor, z: 30 * scaleFactor };
+                    if (t < 0.38) {
+                        const st = t / 0.38;
+                        x = p1.x + (p2.x - p1.x) * st;
+                        y = p1.y + (p2.y - p1.y) * st;
+                        z = p1.z + (p2.z - p1.z) * st;
+                        isWavingArm = false;
+                    } else {
+                        const st = (t - 0.38) / 0.62;
+                        x = p2.x + (p3.x - p2.x) * st;
+                        y = p2.y + (p3.y - p2.y) * st;
+                        z = p2.z + (p3.z - p2.z) * st;
+                        isWavingArm = true;
+                        waveFactor = st;
+                    }
+                    x += (Math.random() - 0.5) * 12;
+                    y += (Math.random() - 0.5) * 12;
+                    z += (Math.random() - 0.5) * 12;
+                }
+
+                return { x, y, z, isWavingArm, waveFactor };
+            }
+
+            /**
+             * 4. SISTEMA SOLAR 3D: Sol central, órbitas keplerianas, asteroides y anillos de Saturno
+             */
+            computeSolarSystemPosition(index, total, clusterIdx) {
+                const scaleFactor = total >= 3000 ? 1.15 : 1.0;
+                const fr = index / total;
+
+                // 14% de nodos pertenecen al Sol central
+                if (fr < 0.14) {
+                    const u = Math.random();
+                    const v = Math.random();
+                    const theta = u * 2.0 * Math.PI;
+                    const phi = Math.acos(2.0 * v - 1.0);
+                    const r = Math.cbrt(Math.random()) * 65 * scaleFactor;
+
+                    const x = r * Math.sin(phi) * Math.cos(theta);
+                    const y = r * Math.sin(phi) * Math.sin(theta);
+                    const z = r * Math.cos(phi);
+
+                    return {
+                        x, y, z,
+                        isSun: true,
+                        orbitRadius: 0,
+                        orbitAngle0: theta,
+                        orbitSpeed: 0,
+                        inclination: 0,
+                        isSaturnRing: false
+                    };
+                }
+
+                const orbitRatio = (fr - 0.14) / 0.86;
+                let zoneIdx = 0;
+                if (orbitRatio < 0.08) zoneIdx = 0;       // Mercurio
+                else if (orbitRatio < 0.17) zoneIdx = 1;  // Venus
+                else if (orbitRatio < 0.28) zoneIdx = 2;  // Tierra & Luna
+                else if (orbitRatio < 0.38) zoneIdx = 3;  // Marte
+                else if (orbitRatio < 0.54) zoneIdx = 4;  // Cinturón de Asteroides
+                else if (orbitRatio < 0.68) zoneIdx = 5;  // Júpiter
+                else if (orbitRatio < 0.82) zoneIdx = 6;  // Saturno & Anillos
+                else if (orbitRatio < 0.92) zoneIdx = 7;  // Urano
+                else zoneIdx = 8;                         // Neptuno y Cinturón Kuiper
+
+                const baseRadii = [
+                    110 * scaleFactor,
+                    155 * scaleFactor,
+                    205 * scaleFactor,
+                    260 * scaleFactor,
+                    335 * scaleFactor,
+                    430 * scaleFactor,
+                    540 * scaleFactor,
+                    645 * scaleFactor,
+                    750 * scaleFactor
+                ];
+
+                const baseRadius = baseRadii[zoneIdx];
+                const angle0 = Math.random() * Math.PI * 2;
+                const orbitSpeed = (0.0016 / Math.sqrt(Math.max(1, baseRadius / 100))) * (Math.random() * 0.2 + 0.9);
+
+                let isSaturnRing = false;
+                let radius = baseRadius;
+                let yOffset = (Math.random() - 0.5) * 8;
+                let inclination = (Math.random() - 0.5) * 0.12;
+
+                if (zoneIdx === 4) {
+                    radius = (305 + Math.random() * 65) * scaleFactor;
+                    yOffset = (Math.random() - 0.5) * 28 * scaleFactor;
+                } else if (zoneIdx === 6) {
+                    if (Math.random() < 0.62) {
+                        isSaturnRing = true;
+                        radius = (baseRadius + (Math.random() - 0.5) * 45 * scaleFactor);
+                        yOffset = (Math.random() - 0.5) * 6;
+                        inclination = 0.47;
+                    }
+                }
+
+                const x = radius * Math.cos(angle0);
+                const z = radius * Math.sin(angle0);
+                const y = z * Math.sin(inclination) + yOffset;
+
+                return {
+                    x, y, z,
+                    isSun: false,
+                    orbitRadius: radius,
+                    orbitAngle0: angle0,
+                    orbitSpeed,
+                    inclination,
+                    isSaturnRing,
+                    yOffset
+                };
+            }
+
+            /**
+             * 5. JARDÍN DE FLORES 3D: Prado ondulado, tallos, hojas y rosas tridimensionales
+             */
+            computeFlowerGardenPosition(index, total, clusterIdx) {
+                const scaleFactor = total >= 3000 ? 1.15 : 1.0;
+                const fr = index / total;
+
+                // 22% de nodos: Prado / Suelo ondulado orgánico (Meadow)
+                if (fr < 0.22) {
+                    const u = Math.random();
+                    const v = Math.random();
+                    const groundR = Math.sqrt(u) * 480 * scaleFactor;
+                    const groundTheta = v * Math.PI * 2;
+
+                    const x = groundR * Math.cos(groundTheta);
+                    const z = groundR * Math.sin(groundTheta);
+                    const y = (175 + Math.sin(x * 0.009) * 22 + Math.cos(z * 0.009) * 18 + (Math.random() - 0.5) * 10) * scaleFactor;
+
+                    return {
+                        x, y, z,
+                        isMeadow: true,
+                        isStem: false,
+                        isPetal: false,
+                        isCenter: false,
+                        flowerIdx: -1,
+                        swayFactor: 0.15
+                    };
+                }
+
+                // 78% de nodos: 7 Flores 3D completas
+                const flowerRatio = (fr - 0.22) / 0.78;
+                const flowerIdx = Math.floor(flowerRatio * 7) % 7;
+                const subRatio = (flowerRatio * 7) - Math.floor(flowerRatio * 7);
+
+                const flowerCenters = [
+                    { x: 0, z: 0, height: 360 * scaleFactor, petalR: 110 * scaleFactor, tilt: 0 },
+                    { x: 210 * scaleFactor, z: 80 * scaleFactor, height: 300 * scaleFactor, petalR: 85 * scaleFactor, tilt: 0.2 },
+                    { x: -190 * scaleFactor, z: 120 * scaleFactor, height: 320 * scaleFactor, petalR: 90 * scaleFactor, tilt: -0.22 },
+                    { x: 90 * scaleFactor, z: -210 * scaleFactor, height: 280 * scaleFactor, petalR: 80 * scaleFactor, tilt: 0.18 },
+                    { x: -110 * scaleFactor, z: -190 * scaleFactor, height: 310 * scaleFactor, petalR: 88 * scaleFactor, tilt: -0.15 },
+                    { x: 260 * scaleFactor, z: -90 * scaleFactor, height: 260 * scaleFactor, petalR: 75 * scaleFactor, tilt: 0.25 },
+                    { x: -270 * scaleFactor, z: -70 * scaleFactor, height: 270 * scaleFactor, petalR: 78 * scaleFactor, tilt: -0.2 }
+                ];
+
+                const fc = flowerCenters[flowerIdx];
+                const groundY = 180 * scaleFactor;
+                const bloomY = groundY - fc.height;
+
+                if (subRatio < 0.28) {
+                    const t = subRatio / 0.28;
+                    const stemCurve = Math.sin(t * Math.PI) * 24 * (flowerIdx % 2 === 0 ? 1 : -1) * scaleFactor;
+                    let x = fc.x + stemCurve + (Math.random() - 0.5) * 6;
+                    let y = groundY - t * fc.height;
+                    let z = fc.z + (Math.random() - 0.5) * 6;
+
+                    if (t > 0.35 && t < 0.65 && Math.random() < 0.4) {
+                        const side = Math.random() > 0.5 ? 1 : -1;
+                        x += side * (18 + Math.random() * 22) * scaleFactor;
+                        z += (Math.random() - 0.5) * 14 * scaleFactor;
+                    }
+
+                    return {
+                        x, y, z,
+                        isMeadow: false,
+                        isStem: true,
+                        isPetal: false,
+                        isCenter: false,
+                        flowerIdx,
+                        swayFactor: t
+                    };
+                } else if (subRatio < 0.82) {
+                    const petT = (subRatio - 0.28) / 0.54;
+                    const petalLayer = petT < 0.38 ? 0 : (petT < 0.72 ? 1 : 2);
+                    const layerScale = [1.0, 0.72, 0.48][petalLayer];
+                    const layerHeightOffset = [0, -12, -22][petalLayer] * scaleFactor;
+
+                    const kPetals = (flowerIdx % 2 === 0) ? 6 : 5;
+                    const theta = Math.random() * Math.PI * 2;
+                    const roseR = fc.petalR * layerScale * (0.35 + 0.65 * Math.abs(Math.cos((kPetals * theta) / 2)));
+                    const rDist = roseR * Math.sqrt(Math.random());
+                    const cupCurve = -Math.sin((rDist / fc.petalR) * Math.PI * 0.5) * (38 * scaleFactor * layerScale);
+
+                    const x = fc.x + rDist * Math.cos(theta) + (Math.random() - 0.5) * 6;
+                    const z = fc.z + rDist * Math.sin(theta) + (Math.random() - 0.5) * 6;
+                    const y = bloomY + cupCurve + layerHeightOffset + (Math.random() - 0.5) * 6;
+
+                    return {
+                        x, y, z,
+                        isMeadow: false,
+                        isStem: false,
+                        isPetal: true,
+                        isCenter: false,
+                        flowerIdx,
+                        swayFactor: 1.0
+                    };
+                } else {
+                    const centerT = (subRatio - 0.82) / 0.18;
+                    const fibIdx = Math.floor(centerT * 100);
+                    const fibAngle = fibIdx * 2.39996;
+                    const fibR = Math.sqrt(fibIdx / 100) * (26 * scaleFactor);
+
+                    const x = fc.x + fibR * Math.cos(fibAngle) + (Math.random() - 0.5) * 4;
+                    const z = fc.z + fibR * Math.sin(fibAngle) + (Math.random() - 0.5) * 4;
+                    const y = bloomY - 14 * scaleFactor + (Math.random() - 0.5) * 4;
+
+                    return {
+                        x, y, z,
+                        isMeadow: false,
+                        isStem: false,
+                        isPetal: false,
+                        isCenter: true,
+                        flowerIdx,
+                        swayFactor: 0.95
+                    };
+                }
+            }
+
+            focusOnNode(node) {
+                if (!node) {
+                    this.selectedNode = null;
+                    this.targetFocusX = 0;
+                    this.targetFocusY = 0;
+                    this.targetFocusZ = 0;
+                    this.targetZoom = 1.0;
+                    document.getElementById('focusBanner').classList.remove('visible');
+                    return;
+                }
+
+                this.selectedNode = node;
+                this.targetFocusX = node.x;
+                this.targetFocusY = node.y;
+                this.targetFocusZ = node.z;
+                this.targetZoom = 1.9;
+
+                document.getElementById('focusNodeName').textContent = node.label;
+                document.getElementById('focusBanner').classList.add('visible');
+
+                const panX = node.sx ? (node.sx / (this.width || 1) * 2 - 1) : 0;
+                this.audio.playSynapse(panX, node.scale || 1.0, node.clusterIdx, true);
+
+                this.triggerSynapticBurst(node.id);
+                this.updateInspectorCard(node);
+            }
+
+            spawnSynapticPulse(originNodeId = null) {
+                if (this.edges.length === 0) return;
+                let edge;
+                if (originNodeId !== null) {
+                    const candidateEdges = this.edges.filter(e => e.a === originNodeId || e.b === originNodeId);
+                    if (candidateEdges.length === 0) return;
+                    edge = candidateEdges[Math.floor(Math.random() * candidateEdges.length)];
+                } else {
+                    edge = this.edges[Math.floor(Math.random() * this.edges.length)];
+                }
+                if (!edge) return;
+
+                const forward = (originNodeId === edge.a) ? true : (originNodeId === edge.b ? false : Math.random() > 0.5);
+                const startId = forward ? edge.a : edge.b;
+                const endId = forward ? edge.b : edge.a;
+
+                this.pulses.push({
+                    from: startId,
+                    to: endId,
+                    t: 0,
+                    speed: originNodeId !== null ? 0.03 : (0.015 + Math.random() * 0.018)
+                });
+            }
+
+            triggerSynapticBurst(centerNodeId = null) {
+                const burstCount = this.nodeCount >= 3000 ? 45 : 30;
+                for (let i = 0; i < burstCount; i++) {
+                    this.spawnSynapticPulse(centerNodeId);
+                }
+            }
+
+            updatePhysics(now) {
+                if (!this.isDragging) {
+                    if (this.autoRotate) {
+                        this.rotY += this.orbitSpeed;
+                    }
+                    this.rotX += this.velRotX;
+                    this.rotY += this.velRotY;
+                    this.velRotX *= 0.92;
+                    this.velRotY *= 0.92;
+                }
+
+                this.rotX = Math.max(-1.35, Math.min(1.35, this.rotX));
+
+                if (this.selectedNode) {
+                    this.targetFocusX = this.selectedNode.x;
+                    this.targetFocusY = this.selectedNode.y;
+                    this.targetFocusZ = this.selectedNode.z;
+
+                    if (now - this.lastFocusPulseTime > 150) {
+                        this.spawnSynapticPulse(this.selectedNode.id);
+                        this.lastFocusPulseTime = now;
+                    }
+                }
+
+                this.zoom += (this.targetZoom - this.zoom) * 0.08;
+                this.focusX += (this.targetFocusX - this.focusX) * 0.08;
+                this.focusY += (this.targetFocusY - this.focusY) * 0.08;
+                this.focusZ += (this.targetFocusZ - this.focusZ) * 0.08;
+
+                // Animación de respiración neuronal suave y morfologías 3D
+                const isStickman = (this.layoutMode === 'stickman');
+                const waveAngle = isStickman ? Math.sin(now * 0.0075) * 0.55 : 0;
+                const cosW = isStickman ? Math.cos(waveAngle) : 1;
+                const sinW = isStickman ? Math.sin(waveAngle) : 0;
+                const elbowX = 70;
+                const elbowY = -160;
+
+                for (let i = 0; i < this.nodes.length; i++) {
+                    const n = this.nodes[i];
+                    let tPos;
+                    if (this.layoutMode === 'brain') {
+                        tPos = n.brainPos;
+                    } else if (this.layoutMode === 'sphere') {
+                        tPos = n.spherePos;
+                    } else if (this.layoutMode === 'hexagon') {
+                        tPos = n.hexagonPos;
+                    } else if (this.layoutMode === 'triangle') {
+                        tPos = n.trianglePos;
+                    } else if (this.layoutMode === 'solarsystem') {
+                        if (n.solarData && !n.solarData.isSun) {
+                            const angle = n.solarData.orbitAngle0 + now * n.solarData.orbitSpeed;
+                            const r = n.solarData.orbitRadius;
+                            const inc = n.solarData.inclination || 0;
+                            const yOff = n.solarData.yOffset || 0;
+                            tPos = {
+                                x: r * Math.cos(angle),
+                                y: r * Math.sin(angle) * Math.sin(inc) + yOff,
+                                z: r * Math.sin(angle)
+                            };
+                        } else if (n.solarData && n.solarData.isSun) {
+                            const pulse = Math.sin(now * 0.003 + (i & 31)) * 3.5;
+                            tPos = {
+                                x: n.solarPos.x + pulse,
+                                y: n.solarPos.y + pulse,
+                                z: n.solarPos.z + pulse
+                            };
+                        } else {
+                            tPos = n.solarPos || n.brainPos;
+                        }
+                    } else if (this.layoutMode === 'flowergarden') {
+                        if (n.flowerData && n.flowerPos) {
+                            const sway = Math.sin(now * 0.0019 + n.flowerPos.x * 0.0035 + (n.flowerData.flowerIdx || 0)) * (16 * (n.flowerData.swayFactor || 0.2));
+                            const swayZ = Math.cos(now * 0.0016 + n.flowerPos.z * 0.0035) * (12 * (n.flowerData.swayFactor || 0.2));
+                            tPos = {
+                                x: n.flowerPos.x + sway,
+                                y: n.flowerPos.y + Math.cos(now * 0.0025 + i * 0.05) * (2.2 * (n.flowerData.swayFactor || 0.1)),
+                                z: n.flowerPos.z + swayZ
+                            };
+                        } else {
+                            tPos = n.flowerPos || n.brainPos;
+                        }
+                    } else if (isStickman) {
+                        tPos = n.stickmanPos;
+                        if (n.isWavingArm) {
+                            const base = n.stickmanBase || n.stickmanPos || { x: 0, y: 0, z: 0 };
+                            const dx = base.x - elbowX;
+                            const dy = base.y - elbowY;
+                            tPos = {
+                                x: elbowX + (dx * cosW - dy * sinW),
+                                y: elbowY + (dx * sinW + dy * cosW),
+                                z: base.z + Math.cos(now * 0.0075) * (26 * (n.waveFactor || 1))
+                            };
+                        }
+                    } else {
+                        tPos = n.brainPos;
+                    }
+
+                    if (!tPos || isNaN(tPos.x) || isNaN(tPos.y) || isNaN(tPos.z)) {
+                        tPos = n.brainPos || { x: 0, y: 0, z: 0 };
+                    }
+                    if (isNaN(n.x) || isNaN(n.y) || isNaN(n.z)) {
+                        n.x = tPos.x;
+                        n.y = tPos.y;
+                        n.z = tPos.z;
+                    }
+
+                    const wave = Math.sin(now * 0.0018 + (i & 63)) * 1.8;
+                    n.x += (tPos.x - n.x) * 0.07;
+                    n.y += (tPos.y + wave - n.y) * 0.07;
+                    n.z += (tPos.z - n.z) * 0.07;
+                }
+
+                const maxPulsesBudget = this.nodeCount >= 3000 ? (this.nodeCount === 5000 ? 110 : 85) : 55;
+                for (let i = this.pulses.length - 1; i >= 0; i--) {
+                    const p = this.pulses[i];
+                    p.t += p.speed;
+                    if (p.t >= 1.0) {
+                        const targetNode = this.nodes[p.to];
+                        if (targetNode && targetNode.scale > 0) {
+                            const panX = targetNode.sx / (this.width || 1) * 2 - 1;
+                            this.audio.playSynapse(panX, targetNode.scale, targetNode.clusterIdx, false);
+                        }
+                        this.pulses.splice(i, 1);
+                        if (this.pulses.length < maxPulsesBudget) {
+                            this.spawnSynapticPulse(this.selectedNode ? this.selectedNode.id : null);
+                        }
+                    }
+                }
+            }
+
+            project3D(x, y, z, cosX, sinX, cosY, sinY) {
+                const tx = x - this.focusX;
+                const ty = y - this.focusY;
+                const tz = z - this.focusZ;
+
+                const rx = tx * cosY - tz * sinY;
+                const rz1 = tz * cosY + tx * sinY;
+
+                const ry = ty * cosX - rz1 * sinX;
+                const rz2 = rz1 * cosX + ty * sinX;
+
+                const camDist = 750 / this.zoom;
+                const depth = camDist + rz2;
+                const scale = (depth > 40) ? (this.fov / depth) : 0;
+
+                return {
+                    sx: this.width * 0.5 + rx * scale,
+                    sy: this.height * 0.5 + ry * scale,
+                    sz: rz2,
+                    scale
+                };
+            }
+
+            render(now) {
+                const ctx = this.ctx;
+                const w = this.width;
+                const h = this.height;
+
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.fillStyle = '#010307';
+                ctx.fillRect(0, 0, w, h);
+
+                const cosX = Math.cos(this.rotX);
+                const sinX = Math.sin(this.rotX);
+                const cosY = Math.cos(this.rotY);
+                const sinY = Math.sin(this.rotY);
+
+                // Polvo estelar ambiental
+                ctx.fillStyle = '#38bdf8';
+                for (let i = 0; i < this.ambientStars.length; i++) {
+                    const st = this.ambientStars[i];
+                    const proj = this.project3D(st.x, st.y, st.z, cosX, sinX, cosY, sinY);
+                    if (proj.scale <= 0) continue;
+                    ctx.globalAlpha = st.alpha * Math.min(1, proj.scale * 0.8);
+                    ctx.fillRect(proj.sx, proj.sy, st.size * proj.scale, st.size * proj.scale);
+                }
+                ctx.globalAlpha = 1.0;
+
+                // Proyección y Detección de Hover acelerada con Bounding Box
+                let closestHover = null;
+                let minHoverDist = 26;
+
+                for (let i = 0; i < this.nodes.length; i++) {
+                    const n = this.nodes[i];
+                    const proj = this.project3D(n.x, n.y, n.z, cosX, sinX, cosY, sinY);
+                    n.sx = proj.sx;
+                    n.sy = proj.sy;
+                    n.sz = proj.sz;
+                    n.scale = proj.scale;
+
+                    const passesFilter = (this.activeClusterFilter === 'all' ||
+                        this.activeClusterFilter === String(n.clusterIdx));
+
+                    if (passesFilter && proj.scale > 0) {
+                        const dx = this.mouseX - proj.sx;
+                        const dy = this.mouseY - proj.sy;
+                        const hitRadius = Math.max(10, n.baseRadius * proj.scale * 0.75);
+
+                        // Optimización de colisión AABB antes de cálculo euclidiano
+                        if (Math.abs(dx) < hitRadius && Math.abs(dy) < hitRadius) {
+                            const d = Math.sqrt(dx * dx + dy * dy);
+                            if (d < hitRadius && d < minHoverDist) {
+                                minHoverDist = d;
+                                closestHover = n;
+                            }
+                        }
+                    }
+                }
+
+                if (closestHover !== this.hoveredNode) {
+                    this.hoveredNode = closestHover;
+                    this.canvas.style.cursor = closestHover ? 'pointer' : (this.isDragging ? 'grabbing' : 'grab');
+                    if (closestHover && !this.selectedNode && !this.linkModeActive) {
+                        this.updateInspectorCard(closestHover);
+                    }
+                }
+
+                const focusNode = this.selectedNode || this.hoveredNode;
+                const isSingleFocus = !!this.selectedNode;
+
+                ctx.globalCompositeOperation = 'lighter';
+                ctx.lineCap = 'round';
+
+                // BATCHING DE ARISTAS: Zero-Allocation reutilizando buffers cacheados (Fase 1)
+                for (let c = 0; c < 5; c++) this.cachedClusterPaths[c].length = 0;
+                this.cachedDimmedPath.length = 0;
+                this.cachedDirectHighlightEdges.length = 0;
+                const clusterPaths = this.cachedClusterPaths;
+                const dimmedPath = this.cachedDimmedPath;
+                const directHighlightEdges = this.cachedDirectHighlightEdges;
+
+                const edgeLineWidth = this.nodeCount >= 3000 ? (this.nodeCount === 5000 ? 0.45 : 0.6) : 0.75;
+
+                for (let i = 0; i < this.edges.length; i++) {
+                    const e = this.edges[i];
+                    const nA = this.nodes[e.a];
+                    const nB = this.nodes[e.b];
+                    if (nA.scale <= 0 || nB.scale <= 0) continue;
+
+                    // Frustum culling de aristas
+                    if ((nA.sx < -80 && nB.sx < -80) || (nA.sx > w + 80 && nB.sx > w + 80) ||
+                        (nA.sy < -80 && nB.sy < -80) || (nA.sy > h + 80 && nB.sy > h + 80)) {
+                        continue;
+                    }
+
+                    const inCluster = (this.activeClusterFilter === 'all' ||
+                        String(nA.clusterIdx) === this.activeClusterFilter ||
+                        String(nB.clusterIdx) === this.activeClusterFilter);
+
+                    const isDirect = focusNode && (e.a === focusNode.id || e.b === focusNode.id);
+
+                    if (isDirect) {
+                        directHighlightEdges.push({ nA, nB, rgb: focusNode.rgb });
+                    } else if (!inCluster) {
+                        dimmedPath.push(nA.sx, nA.sy, nB.sx, nB.sy);
+                    } else if (isSingleFocus) {
+                        dimmedPath.push(nA.sx, nA.sy, nB.sx, nB.sy);
+                    } else {
+                        clusterPaths[nA.clusterIdx].push(nA.sx, nA.sy, nB.sx, nB.sy);
+                    }
+                }
+
+                // 1. Dibujar líneas de fondo agrupadas por clúster con la paleta de color activa
+                ctx.lineWidth = edgeLineWidth;
+                const baseEdgeAlpha = this.nodeCount >= 3000 ? (this.nodeCount === 5000 ? 0.16 : 0.22) : 0.28;
+                const palette = this.getCurrentClusterPalette();
+
+                for (let c = 0; c < palette.length; c++) {
+                    const p = clusterPaths[c];
+                    if (p.length === 0) continue;
+                    const [r, g, b] = palette[c].rgb;
+                    ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${baseEdgeAlpha})`;
+                    ctx.beginPath();
+                    for (let k = 0; k < p.length; k += 4) {
+                        ctx.moveTo(p[k], p[k + 1]);
+                        ctx.lineTo(p[k + 2], p[k + 3]);
+                    }
+                    ctx.stroke();
+                }
+
+                // 2. Dibujar aristas atenuadas en un solo trazo
+                if (dimmedPath.length > 0) {
+                    ctx.strokeStyle = `rgba(148, 163, 184, 0.02)`;
+                    ctx.lineWidth = 0.5;
+                    ctx.beginPath();
+                    for (let k = 0; k < dimmedPath.length; k += 4) {
+                        ctx.moveTo(dimmedPath[k], dimmedPath[k + 1]);
+                        ctx.lineTo(dimmedPath[k + 2], dimmedPath[k + 3]);
+                    }
+                    ctx.stroke();
+                }
+
+                // 3. Dibujar aristas de enfoque activo destacadas
+                if (directHighlightEdges.length > 0) {
+                    ctx.lineWidth = 2.4;
+                    for (let k = 0; k < directHighlightEdges.length; k++) {
+                        const { nA, nB, rgb } = directHighlightEdges[k];
+                        ctx.strokeStyle = `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 0.95)`;
+                        ctx.beginPath();
+                        ctx.moveTo(nA.sx, nA.sy);
+                        ctx.lineTo(nB.sx, nB.sy);
+                        ctx.stroke();
+                    }
+                }
+
+                // 4. MODO CONSTELACIONES / TRIANGULACIÓN 3D (Fase 2)
+                if (this.constellationsEnabled) {
+                    const palette = this.getCurrentClusterPalette();
+                    const stride = this.nodeCount >= 3000 ? 3 : 1;
+                    for (let i = 0; i < this.nodes.length; i += stride) {
+                        const nA = this.nodes[i];
+                        if (nA.scale <= 0 || !nA.neighbors || nA.neighbors.length < 2) continue;
+                        const nB = this.nodes[nA.neighbors[0]];
+                        const nC = this.nodes[nA.neighbors[1]];
+                        if (!nB || !nC || nB.scale <= 0 || nC.scale <= 0) continue;
+                        if ((nA.sx < 0 && nB.sx < 0 && nC.sx < 0) || (nA.sx > w && nB.sx > w && nC.sx > w)) continue;
+
+                        const [r, g, b] = palette[nA.clusterIdx].rgb;
+                        ctx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.032)`;
+                        ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, 0.12)`;
+                        ctx.lineWidth = 0.5;
+                        ctx.beginPath();
+                        ctx.moveTo(nA.sx, nA.sy);
+                        ctx.lineTo(nB.sx, nB.sy);
+                        ctx.lineTo(nC.sx, nC.sy);
+                        ctx.closePath();
+                        ctx.fill();
+                        ctx.stroke();
+                    }
+                }
+
+                // Renderizado de Pulsos sinápticos
+                for (let i = 0; i < this.pulses.length; i++) {
+                    const p = this.pulses[i];
+                    const nA = this.nodes[p.from];
+                    const nB = this.nodes[p.to];
+                    if (nA.scale <= 0 || nB.scale <= 0) continue;
+
+                    if (this.selectedNode &&
+                        p.from !== this.selectedNode.id &&
+                        p.to !== this.selectedNode.id) {
+                        continue;
+                    }
+
+                    const px = nA.sx + (nB.sx - nA.sx) * p.t;
+                    const py = nA.sy + (nB.sy - nA.sy) * p.t;
+                    const pScale = nA.scale + (nB.scale - nA.scale) * p.t;
+
+                    const sprite = this.glowSprites[nA.clusterIdx];
+                    const sSize = Math.max(5, (this.nodeCount >= 3000 ? 11 : 15) * pScale);
+                    ctx.drawImage(sprite, px - sSize * 0.5, py - sSize * 0.5, sSize, sSize);
+                }
+
+                // Renderizado masivo de nodos optimizado con Frustum Culling
+                const labeledNodes = [];
+                const minDrawR = this.nodeCount >= 3000 ? (this.nodeCount === 5000 ? 3.0 : 4.0) : 5.5;
+
+                for (let i = 0; i < this.nodes.length; i++) {
+                    const n = this.nodes[i];
+                    if (n.scale <= 0) continue;
+                    if (n.sx < -50 || n.sx > w + 50 || n.sy < -50 || n.sy > h + 50) continue;
+
+                    const inCluster = (this.activeClusterFilter === 'all' ||
+                        String(n.clusterIdx) === this.activeClusterFilter);
+
+                    const isTarget = focusNode && (n.id === focusNode.id);
+                    const isDirectNeighbor = focusNode && focusNode.neighbors.includes(n.id);
+                    const isLinkSource = this.linkModeActive && this.linkSourceNode && (this.linkSourceNode.id === n.id);
+
+                    let alpha = Math.min(1.0, n.scale * 0.85);
+                    if (!inCluster) {
+                        alpha = 0.04;
+                    } else if (this.selectedNode && !isTarget && !isDirectNeighbor) {
+                        alpha = 0.05;
+                    } else if (this.hoveredNode && !isTarget && !isDirectNeighbor) {
+                        alpha = 0.16;
+                    }
+
+                    ctx.globalAlpha = alpha;
+                    const sprite = this.glowSprites[n.clusterIdx];
+                    const mult = isTarget ? 1.85 : (isDirectNeighbor ? 1.35 : 1.0);
+                    
+                    // PROFUNDIDAD DE CAMPO ÓPTICA (BOKEH / DOF MACRO LENS) (Fase 2)
+                    const focalZ = this.selectedNode ? this.selectedNode.sz : 0;
+                    let drawRadius = Math.max(minDrawR, n.baseRadius * n.scale * mult);
+                    if (this.bokehDofEnabled) {
+                        const depthDiff = Math.abs(n.sz - focalZ);
+                        const dof = Math.min(1.0, depthDiff / 400);
+                        drawRadius = Math.max(minDrawR, n.baseRadius * n.scale * mult * (1.0 + dof * 0.85));
+                        if (dof > 0.25 && !isTarget && !isDirectNeighbor) {
+                            alpha *= Math.max(0.12, 1.0 - dof * 0.45);
+                            ctx.globalAlpha = alpha;
+                        }
+                    }
+
+                    ctx.drawImage(
+                        sprite,
+                        n.sx - drawRadius,
+                        n.sy - drawRadius,
+                        drawRadius * 2,
+                        drawRadius * 2
+                    );
+
+                    if (isTarget || isLinkSource) {
+                        ctx.strokeStyle = isLinkSource ? '#fbbf24' : '#ffffff';
+                        ctx.lineWidth = 1.6;
+                        ctx.beginPath();
+                        ctx.arc(n.sx, n.sy, drawRadius * 0.52, 0, Math.PI * 2);
+                        ctx.stroke();
+
+                        const angle = now * 0.003;
+                        ctx.strokeStyle = n.color;
+                        ctx.lineWidth = 1.3;
+                        ctx.beginPath();
+                        ctx.arc(n.sx, n.sy, drawRadius * 0.78, angle, angle + Math.PI * 1.3);
+                        ctx.stroke();
+                    }
+
+                    const shouldShowLabel = this.showLabels && inCluster && (
+                        isTarget ||
+                        isDirectNeighbor ||
+                        isLinkSource ||
+                        (!this.selectedNode && n.isHub && n.scale > (this.nodeCount >= 3000 ? 1.15 : 0.95))
+                    );
+
+                    if (shouldShowLabel) {
+                        labeledNodes.push({ n, isTarget, isDirectNeighbor, alpha, drawRadius });
+                    }
+                }
+
+                // Renderizado de etiquetas con presupuesto controlado (evita degradación del contexto 2D)
+                if (labeledNodes.length > 0 && !document.documentElement.classList.contains('pure-simulation-mode')) {
+                    ctx.globalCompositeOperation = 'source-over';
+                    const maxLabels = Math.min(30, labeledNodes.length);
+                    for (let k = 0; k < maxLabels; k++) {
+                        const { n, isTarget, isDirectNeighbor, alpha, drawRadius } = labeledNodes[k];
+                        ctx.globalAlpha = isTarget ? 1.0 : (isDirectNeighbor ? 0.92 : Math.min(0.85, alpha));
+                        ctx.font = `${isTarget ? '700 12.5px' : (isDirectNeighbor ? '600 11px' : '600 9.5px')} "Segoe UI", sans-serif`;
+                        ctx.textAlign = 'center';
+
+                        ctx.fillStyle = 'rgba(1, 3, 7, 0.92)';
+                        ctx.fillText(n.label, n.sx + 1, n.sy - drawRadius * 0.5 + 1);
+
+                        ctx.fillStyle = isTarget ? '#ffffff' : n.color;
+                        ctx.fillText(n.label, n.sx, n.sy - drawRadius * 0.5);
+                    }
+                }
+
+                ctx.globalAlpha = 1.0;
+                ctx.globalCompositeOperation = 'source-over';
+            }
+
+            updateInspectorCard(node) {
+                const cluster = CLUSTERS[node.clusterIdx];
+                const card = document.getElementById('nodeInspector');
+                card.style.borderLeftColor = cluster.color;
+                document.getElementById('nodeCluster').style.color = cluster.color;
+                document.getElementById('nodeCluster').textContent = cluster.name;
+                document.getElementById('nodeTitle').textContent = node.label;
+                document.getElementById('nodeDesc').textContent =
+                    `Conectado con ${node.neighbors.length} sinapsis (clic en un chip para saltar):`;
+
+                const chipsContainer = document.getElementById('synapseChips');
+                chipsContainer.innerHTML = '';
+                node.neighbors.slice(0, 16).forEach(nId => {
+                    const neighborNode = this.nodes[nId];
+                    if (!neighborNode) return;
+                    const chip = document.createElement('span');
+                    chip.className = 'synapse-chip';
+                    chip.textContent = `→ ${neighborNode.label}`;
+                    chip.addEventListener('click', () => {
+                        this.focusOnNode(neighborNode);
+                    });
+                    chipsContainer.appendChild(chip);
+                });
+            }
+
+            updateFps(now) {
+                this.frameCount++;
+                if (now - this.lastFpsTime >= 500) {
+                    this.currentFps = Math.min(60, Math.round((this.frameCount * 1000) / (now - this.lastFpsTime)));
+                    this.updateCountersHUD();
+
+                    // Puente de telemetría hacia el Master Launcher (postMessage)
+                    if (window.parent && window.parent !== window) {
+                        try {
+                            const shapeNames = {
+                                brain: 'Hemisferios',
+                                sphere: 'Esfera',
+                                solarsystem: 'Sistema Solar 3D',
+                                flowergarden: 'Jardín de Flores 3D',
+                                hexagon: 'Hexágono 3D',
+                                triangle: 'Triángulo 3D',
+                                stickman: 'Stickman Saludando'
+                            };
+                            window.parent.postMessage({
+                                type: 'telemetry_bridge',
+                                module: 'brain3d',
+                                moduleName: 'SEGUNDO CEREBRO 3D',
+                                fps: this.currentFps,
+                                metricKey: 'Nodos / Sinapsis',
+                                metricValue: `${this.nodes.length.toLocaleString()} N / ${this.edges.length.toLocaleString()} S`,
+                                subtext: `Morfología: ${shapeNames[this.layoutMode] || this.layoutMode}`
+                            }, '*');
+                        } catch (e) {}
+                    }
+
+                    this.frameCount = 0;
+                    this.lastFpsTime = now;
+                }
+            }
+
+            bindEvents() {
+                // Eventos de ratón
+                this.canvas.addEventListener('mousedown', (e) => {
+                    this.isDragging = true;
+                    this.dragMoved = false;
+                    this.lastMouseX = e.clientX;
+                    this.lastMouseY = e.clientY;
+                });
+
+                window.addEventListener('mousemove', (e) => {
+                    this.mouseX = e.clientX;
+                    this.mouseY = e.clientY;
+
+                    if (!this.isDragging) return;
+                    const dx = e.clientX - this.lastMouseX;
+                    const dy = e.clientY - this.lastMouseY;
+
+                    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+                        this.dragMoved = true;
+                    }
+
+                    this.velRotY = dx * 0.0055;
+                    this.velRotX = dy * 0.0055;
+                    this.rotY += this.velRotY;
+                    this.rotX += this.velRotX;
+
+                    this.lastMouseX = e.clientX;
+                    this.lastMouseY = e.clientY;
+                });
+
+                window.addEventListener('mouseup', () => {
+                    if (this.isDragging && !this.dragMoved) {
+                        if (this.hoveredNode) {
+                            if (this.linkModeActive) {
+                                if (!this.linkSourceNode) {
+                                    this.linkSourceNode = this.hoveredNode;
+                                    document.getElementById('linkModeStep').textContent =
+                                        `Origen [${this.linkSourceNode.label}] ➔ Selecciona Destino (B)`;
+                                } else {
+                                    const success = this.manualLinkNodes(this.linkSourceNode.id, this.hoveredNode.id);
+                                    if (success) {
+                                        document.getElementById('linkModeStep').textContent = `¡Sinapsis tejida! Elige Origen (A)`;
+                                    } else {
+                                        document.getElementById('linkModeStep').textContent = `Ya estaban conectados. Elige otro (B)`;
+                                    }
+                                    this.linkSourceNode = null;
+                                }
+                            } else {
+                                this.focusOnNode(this.hoveredNode);
+                            }
+                        } else if (!this.linkModeActive) {
+                            this.focusOnNode(null);
+                        }
+                    }
+                    this.isDragging = false;
+                });
+
+                this.canvas.addEventListener('wheel', (e) => {
+                    e.preventDefault();
+                    const factor = e.deltaY < 0 ? 1.12 : 0.89;
+                    this.targetZoom = Math.max(0.4, Math.min(3.5, this.targetZoom * factor));
+                }, { passive: false });
+
+                // Eventos táctiles (Móviles / Tablets con soporte de pellizco y órbita)
+                let touchPinchDist = 0;
+                this.canvas.addEventListener('touchstart', (e) => {
+                    if (e.touches.length === 1) {
+                        this.isDragging = true;
+                        this.dragMoved = false;
+                        this.lastMouseX = e.touches[0].clientX;
+                        this.lastMouseY = e.touches[0].clientY;
+                        this.mouseX = e.touches[0].clientX;
+                        this.mouseY = e.touches[0].clientY;
+                    } else if (e.touches.length === 2) {
+                        this.isDragging = false;
+                        const dx = e.touches[0].clientX - e.touches[1].clientX;
+                        const dy = e.touches[0].clientY - e.touches[1].clientY;
+                        touchPinchDist = Math.sqrt(dx * dx + dy * dy);
+                    }
+                }, { passive: false });
+
+                this.canvas.addEventListener('touchmove', (e) => {
+                    e.preventDefault();
+                    if (e.touches.length === 1 && this.isDragging) {
+                        const tX = e.touches[0].clientX;
+                        const tY = e.touches[0].clientY;
+                        const dx = tX - this.lastMouseX;
+                        const dy = tY - this.lastMouseY;
+                        if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+                            this.dragMoved = true;
+                        }
+                        this.velRotY = dx * 0.0055;
+                        this.velRotX = dy * 0.0055;
+                        this.rotY += this.velRotY;
+                        this.rotX += this.velRotX;
+                        this.lastMouseX = tX;
+                        this.lastMouseY = tY;
+                        this.mouseX = tX;
+                        this.mouseY = tY;
+                    } else if (e.touches.length === 2 && touchPinchDist > 0) {
+                        const dx = e.touches[0].clientX - e.touches[1].clientX;
+                        const dy = e.touches[0].clientY - e.touches[1].clientY;
+                        const dist = Math.sqrt(dx * dx + dy * dy);
+                        const factor = dist / touchPinchDist;
+                        if (factor > 0.5 && factor < 2.0) {
+                            this.targetZoom = Math.max(0.4, Math.min(3.5, this.targetZoom * (1 + (factor - 1) * 0.3)));
+                        }
+                        touchPinchDist = dist;
+                    }
+                }, { passive: false });
+
+                this.canvas.addEventListener('touchend', (e) => {
+                    if (e.touches.length === 0) {
+                        if (this.isDragging && !this.dragMoved && this.hoveredNode) {
+                            this.focusOnNode(this.hoveredNode);
+                        }
+                        this.isDragging = false;
+                        touchPinchDist = 0;
+                    }
+                });
+
+                document.getElementById('btnExitFocus').addEventListener('click', () => {
+                    this.focusOnNode(null);
+                });
+
+                // Selector de Escala de Nodos (300, 1500, 3000, 5000)
+                const scaleBtns = document.querySelectorAll('.scale-btn');
+                scaleBtns.forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const count = parseInt(btn.dataset.count, 10);
+                        this.setNodeCount(count);
+                    });
+                });
+
+                // Buscador inteligente con salida temprana
+                const searchInput = document.getElementById('searchInput');
+                const searchResults = document.getElementById('searchResults');
+
+                const renderSearchDropdown = (query) => {
+                    const q = query.trim().toLowerCase();
+                    if (!q) {
+                        searchResults.classList.remove('open');
+                        return;
+                    }
+
+                    const seenLabels = new Set();
+                    const matches = [];
+                    for (let i = 0; i < this.nodes.length && matches.length < 8; i++) {
+                        const node = this.nodes[i];
+                        const match = node.label.toLowerCase().includes(q) ||
+                            CLUSTERS[node.clusterIdx].name.toLowerCase().includes(q);
+                        if (match && !seenLabels.has(node.label)) {
+                            seenLabels.add(node.label);
+                            matches.push(node);
+                        }
+                    }
+
+                    searchResults.innerHTML = '';
+                    if (matches.length === 0) {
+                        searchResults.innerHTML = `<div style="padding:8px 10px; font-size:11px; color:#64748b;">Sin coincidencias en red masiva.</div>`;
+                    } else {
+                        matches.forEach(node => {
+                            const row = document.createElement('div');
+                            row.className = 'search-item';
+                            row.innerHTML = `
+                                <div class="search-item-left">
+                                    <span class="dot" style="color:${node.color}; background:${node.color}; width:8px; height:8px;"></span>
+                                    <span>${node.label}</span>
+                                </div>
+                                <small>${node.neighbors.length} sinapsis</small>
+                            `;
+                            row.addEventListener('click', () => {
+                                this.focusOnNode(node);
+                                searchResults.classList.remove('open');
+                                searchInput.value = node.label;
+                            });
+                            searchResults.appendChild(row);
+                        });
+                    }
+                    searchResults.classList.add('open');
+                };
+
+                searchInput.addEventListener('input', (e) => renderSearchDropdown(e.target.value));
+                searchInput.addEventListener('focus', (e) => renderSearchDropdown(e.target.value));
+
+                searchInput.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        const firstItem = searchResults.querySelector('.search-item');
+                        if (firstItem) firstItem.click();
+                    } else if (e.key === 'Escape') {
+                        searchResults.classList.remove('open');
+                        searchInput.blur();
+                    }
+                });
+
+                // Inyector de neuronas
+                const btnToggleAdd = document.getElementById('btnToggleAdd');
+                const addNodePopover = document.getElementById('addNodePopover');
+                const inputNodeName = document.getElementById('inputNodeName');
+                const selectNodeCluster = document.getElementById('selectNodeCluster');
+
+                btnToggleAdd.addEventListener('click', () => {
+                    const isOpen = addNodePopover.classList.toggle('open');
+                    btnToggleAdd.classList.toggle('active', isOpen);
+                    if (isOpen) {
+                        searchResults.classList.remove('open');
+                        inputNodeName.focus();
+                    }
+                });
+
+                document.getElementById('btnClosePopover').addEventListener('click', () => {
+                    addNodePopover.classList.remove('open');
+                    btnToggleAdd.classList.remove('active');
+                });
+
+                const executeAddNode = () => {
+                    const label = inputNodeName.value.trim();
+                    if (!label) {
+                        inputNodeName.focus();
+                        return;
+                    }
+                    this.addCustomNodeLive(label, selectNodeCluster.value);
+                    inputNodeName.value = '';
+                    addNodePopover.classList.remove('open');
+                    btnToggleAdd.classList.remove('active');
+                };
+
+                document.getElementById('btnConfirmAddNode').addEventListener('click', executeAddNode);
+                inputNodeName.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') executeAddNode();
+                });
+
+                // Modo Puente
+                const btnLinkMode = document.getElementById('btnLinkMode');
+                const linkModeBanner = document.getElementById('linkModeBanner');
+
+                btnLinkMode.addEventListener('click', () => {
+                    this.linkModeActive = !this.linkModeActive;
+                    this.linkSourceNode = null;
+                    btnLinkMode.classList.toggle('link-mode-active', this.linkModeActive);
+                    linkModeBanner.classList.toggle('visible', this.linkModeActive);
+                    document.getElementById('linkModeStep').textContent = 'Selecciona Nodo Origen (A)';
+                    if (this.linkModeActive) this.focusOnNode(null);
+                });
+
+                document.getElementById('btnCancelLink').addEventListener('click', () => {
+                    this.linkModeActive = false;
+                    this.linkSourceNode = null;
+                    btnLinkMode.classList.remove('link-mode-active');
+                    linkModeBanner.classList.remove('visible');
+                });
+
+                // Filtros de clústeres
+                const clusterItems = document.querySelectorAll('.cluster-item');
+                clusterItems.forEach(item => {
+                    item.addEventListener('click', () => {
+                        clusterItems.forEach(el => el.classList.remove('active-cluster'));
+                        item.classList.add('active-cluster');
+                        this.activeClusterFilter = item.dataset.cluster;
+                        this.focusOnNode(null);
+                        this.triggerSynapticBurst();
+                    });
+                });
+
+                // Controles del Dock
+                const btnAuto = document.getElementById('btnAutoRotate');
+                btnAuto.addEventListener('click', () => {
+                    this.autoRotate = !this.autoRotate;
+                    btnAuto.textContent = this.autoRotate ? '⟳ Auto-Órbita: ON' : '⟳ Auto-Órbita: OFF';
+                    btnAuto.classList.toggle('active', this.autoRotate);
+                });
+
+                const btnLabels = document.getElementById('btnToggleLabels');
+                btnLabels.addEventListener('click', () => {
+                    this.showLabels = !this.showLabels;
+                    btnLabels.classList.toggle('active', this.showLabels);
+                });
+
+                // Selector de formas morfológicas 3D
+                const shapeBtns = document.querySelectorAll('.shape-btn');
+                shapeBtns.forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        this.setLayoutMode(btn.dataset.shape);
+                    });
+                });
+
+                // Selector y ciclado de color temático de módulos
+                const btnCycleColor = document.getElementById('btnCycleColor');
+                if (btnCycleColor) {
+                    btnCycleColor.addEventListener('click', () => {
+                        this.cycleColorTheme();
+                    });
+                }
+
+                document.querySelectorAll('.palette-dot').forEach(dot => {
+                    dot.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        this.setColorTheme(dot.dataset.theme);
+                    });
+                });
+
+                // Botones Fase 2: Audio Espacial 3D, Bokeh y Constelaciones
+                const btnAudio = document.getElementById('btnSpatialAudio');
+                if (btnAudio) {
+                    btnAudio.addEventListener('click', () => {
+                        this.audio.enabled = !this.audio.enabled;
+                        btnAudio.textContent = this.audio.enabled ? '🔊 Audio 3D: ON' : '🔇 Audio 3D: OFF';
+                        btnAudio.classList.toggle('active', this.audio.enabled);
+                        if (this.audio.enabled) this.audio.init();
+                    });
+                }
+                const btnBokeh = document.getElementById('btnToggleBokeh');
+                if (btnBokeh) {
+                    btnBokeh.addEventListener('click', () => {
+                        this.bokehDofEnabled = !this.bokehDofEnabled;
+                        btnBokeh.textContent = this.bokehDofEnabled ? '📷 Bokeh DoF: ON' : '📷 Bokeh DoF: OFF';
+                        btnBokeh.classList.toggle('active', this.bokehDofEnabled);
+                    });
+                }
+                const btnConst = document.getElementById('btnToggleConstellations');
+                if (btnConst) {
+                    btnConst.addEventListener('click', () => {
+                        this.constellationsEnabled = !this.constellationsEnabled;
+                        btnConst.textContent = this.constellationsEnabled ? '✨ Constelaciones: ON' : '✨ Constelaciones: OFF';
+                        btnConst.classList.toggle('active', this.constellationsEnabled);
+                    });
+                }
+
+                document.getElementById('btnResetAll').addEventListener('click', () => {
+                    if (confirm(`¿Restaurar la red masiva para la escala actual (${this.nodeCount.toLocaleString()} nodos)?`)) {
+                        try {
+                            localStorage.removeItem(`second_brain_massive_v7_${this.nodeCount}`);
+                            localStorage.removeItem(`second_brain_massive_v6_${this.nodeCount}`);
+                            localStorage.removeItem(`second_brain_massive_v5_${this.nodeCount}`);
+                            localStorage.removeItem('second_brain_massive_v4');
+                        } catch (e) {}
+                        this.loadOrBuildGraph();
+                        this.focusOnNode(null);
+                    }
+                });
+
+                window.addEventListener('keydown', (e) => {
+                    const tag = document.activeElement.tagName;
+                    if (tag === 'INPUT' || tag === 'SELECT') return;
+
+                    if (e.code === 'Escape') {
+                        this.focusOnNode(null);
+                        addNodePopover.classList.remove('open');
+                        btnToggleAdd.classList.remove('active');
+                        this.linkModeActive = false;
+                        linkModeBanner.classList.remove('visible');
+                        btnLinkMode.classList.remove('link-mode-active');
+                    } else if (e.key === '/') {
+                        e.preventDefault();
+                        searchInput.focus();
+                    }
+                });
+
+                window.addEventListener('resize', () => {
+                    this.width = window.innerWidth;
+                    this.height = window.innerHeight;
+                    this.canvas.width = this.width;
+                    this.canvas.height = this.height;
+                });
+            }
+
+            startLoop() {
+                const loop = (now) => {
+                    requestAnimationFrame(loop);
+                    try {
+                        this.updateFps(now);
+                        this.updatePhysics(now);
+                        this.render(now);
+                    } catch (err) {
+                        console.error('Error in render loop:', err);
+                    }
+                };
+                requestAnimationFrame(loop);
+            }
+        }
+
+        window.addEventListener('load', () => {
+            try {
+                window.brain3D = new SecondBrainMassiveEngine();
+                window.brain3D.startLoop();
+            } catch (err) {
+                console.error('Fatal initialization error:', err);
+            }
+        });
+    </script>
+</body>
+
+</html>

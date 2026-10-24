@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AAA ENGINE SUITE // Master Launcher & Worker Telemetry</title>
+    <style>
+        :root {
+            --bg-void: #020408;
+            --bg-panel: #070b12;
+            --bg-card: #0b101c;
+            --border-tech: #1e293b;
+            --accent-cyan: #00e5ff;
+            --accent-neon: #00ff9d;
+            --accent-purple: #c084fc;
+            --text-main: #f1f5f9;
+            --text-dim: #64748b;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-user-select: none;
+            user-select: none;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-void);
+            color: var(--text-main);
+            height: 100vh;
+            width: 100vw;
+            display: flex;
+            overflow: hidden;
+        }
+
+        /* BARRA LATERAL DE SISTEMA (ESTILO LAUNCHER AAA - PLEGABLE) */
+        .sidebar {
+            width: 320px;
+            background-color: var(--bg-panel);
+            border-right: 1px solid var(--border-tech);
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            gap: 16px;
+            z-index: 50;
+            position: relative;
+            flex-shrink: 0;
+            transition: margin-left 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.3s ease;
+        }
+
+        .sidebar.collapsed {
+            margin-left: -320px;
+            box-shadow: none;
+        }
+
+        /* BOTÓN DE COLAPSO FLOTANTE */
+        .sidebar-toggle-btn {
+            position: absolute;
+            top: 18px;
+            right: -36px;
+            width: 36px;
+            height: 38px;
+            background: var(--bg-panel);
+            border: 1px solid var(--border-tech);
+            border-left: none;
+            color: var(--accent-cyan);
+            border-radius: 0 8px 8px 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 700;
+            transition: all 0.2s ease;
+            box-shadow: 4px 4px 15px rgba(0, 0, 0, 0.5);
+            z-index: 100;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        .sidebar-toggle-btn:hover {
+            background: #111827;
+            color: #ffffff;
+            border-color: var(--accent-cyan);
+            box-shadow: 0 0 14px rgba(0, 229, 255, 0.4);
+            transform: scale(1.05);
+        }
+
+        .sidebar-toggle-btn:active {
+            transform: scale(0.96);
+        }
+
+        .engine-brand h1 {
+            font-size: 16px;
+            font-weight: 800;
+            letter-spacing: 1px;
+            color: var(--accent-cyan);
+            font-family: 'Consolas', monospace;
+        }
+
+        .engine-brand p {
+            font-size: 11px;
+            color: var(--text-dim);
+            margin-top: 4px;
+        }
+
+        .nav-menu {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .nav-btn {
+            background: var(--bg-card);
+            border: 1px solid var(--border-tech);
+            color: var(--text-main);
+            padding: 10px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            text-align: left;
+            transition: all 0.15s ease;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .nav-btn:hover {
+            border-color: var(--accent-cyan);
+            background: #111827;
+            transform: translateX(3px);
+        }
+
+        .nav-btn.active {
+            background: rgba(0, 229, 255, 0.12);
+            border-color: var(--accent-cyan);
+            color: var(--accent-cyan);
+            box-shadow: inset 0 0 10px rgba(0, 229, 255, 0.2);
+        }
+
+        .nav-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-width: 0;
+        }
+
+        .nav-icon {
+            font-size: 16px;
+            line-height: 1;
+            flex-shrink: 0;
+            filter: drop-shadow(0 0 6px rgba(0, 229, 255, 0.3));
+        }
+
+        .nav-text {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .nav-tag {
+            font-family: 'Consolas', monospace;
+            font-size: 10.5px;
+            font-weight: 700;
+            flex-shrink: 0;
+        }
+
+        /* TELEMETRÍA DEL WORKER HILO SECUNDARIO */
+        .worker-telemetry {
+            margin-top: auto;
+            background: var(--bg-card);
+            border: 1px solid var(--border-tech);
+            border-radius: 6px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .telemetry-title {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: var(--accent-neon);
+            font-weight: 700;
+        }
+
+        .telemetry-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11.5px;
+            color: var(--text-dim);
+            font-family: 'Consolas', monospace;
+        }
+
+        .telemetry-row b {
+            color: var(--text-main);
+        }
+
+        #workerCanvas {
+            width: 100%;
+            height: 40px;
+            background: #030508;
+            border: 1px solid #152238;
+            border-radius: 3px;
+            display: block;
+        }
+
+        /* VIEWPORT CENTRAL DE PROYECTOS (IFRAME SANDBOX) */
+        .viewport-container {
+            flex: 1;
+            position: relative;
+            background: #010204;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #moduleFrame {
+            width: 100%;
+            height: 100%;
+            border: none;
+            display: block;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- SIDEBAR DE NAVEGACIÓN AAA (PLEGABLE) -->
+    <aside class="sidebar" id="sidebar">
+        <!-- BOTÓN PARA PLEGAR / DESPLEGAR -->
+        <button id="btnToggleSidebar" class="sidebar-toggle-btn" title="Plegar Barra Lateral" aria-label="Plegar o desplegar barra lateral">
+            <span id="toggleIcon">◀</span>
+        </button>
+
+        <div class="engine-brand">
+            <h1>MASTER SUITE // ENGINE</h1>
+            <p>Arquitectura Multihilo & Web Workers</p>
+        </div>
+
+        <div class="nav-menu">
+            <button class="nav-btn active" data-url="html juego de vida automata/index.html">
+                <span class="nav-left">
+                    <span class="nav-icon">🧬</span>
+                    <span class="nav-text">1. Autómata Celular Pro</span>
+                </span>
+                <span class="nav-tag" style="color:var(--accent-neon);">O(A)</span>
+            </button>
+            <button class="nav-btn" data-url="html fisica de interacciones/index.html">
+                <span class="nav-left">
+                    <span class="nav-icon">⚛️</span>
+                    <span class="nav-text">2. Física de Partículas</span>
+                </span>
+                <span class="nav-tag" style="color:var(--accent-cyan);">SoA</span>
+            </button>
+            <button class="nav-btn" data-url="html juego laberito/index.html">
+                <span class="nav-left">
+                    <span class="nav-icon">⚡</span>
+                    <span class="nav-text">3. Suite de Algoritmos</span>
+                </span>
+                <span class="nav-tag" style="color:var(--accent-purple);">VS</span>
+            </button>
+            <button class="nav-btn" data-url="cerebro 3d/3d2.html">
+                <span class="nav-left">
+                    <span class="nav-icon">🧠</span>
+                    <span class="nav-text">4. Segundo Cerebro 3D</span>
+                </span>
+                <span class="nav-tag" style="color:var(--accent-cyan);">3D</span>
+            </button>
+        </div>
+
+        <!-- PANEL DE MONITOREO DE HILOS (WEB WORKER TELEMETRY) -->
+        <div class="worker-telemetry">
+            <div class="telemetry-title">⚡ Web Worker Thread Status</div>
+            <div class="telemetry-row">
+                <span>Estado del Hilo:</span> <b id="workerState" style="color:var(--accent-neon);">ACTIVO
+                    (PARALELO)</b>
+            </div>
+            <div class="telemetry-row">
+                <span>Núcleos CPU:</span> <b id="workerCores" style="color:var(--accent-cyan);">Multinúcleo</b>
+            </div>
+            <div class="telemetry-row">
+                <span>Latencia de Sincronización:</span> <b id="workerPing">0.42 ms</b>
+            </div>
+            <canvas id="workerCanvas" width="270" height="40"></canvas>
+        </div>
+
+        <!-- PUENTE DE TELEMETRÍA GLOBAL DEL MÓDULO ACTIVO -->
+        <div class="worker-telemetry" style="border-left-color: var(--accent-cyan); margin-top: 10px;">
+            <div class="telemetry-title" style="color:var(--accent-cyan);">📡 Telemetría Suite (IFrame)</div>
+            <div class="telemetry-row">
+                <span>Módulo Activo:</span> <b id="childModuleName" style="color:#ffffff;">Iniciando...</b>
+            </div>
+            <div class="telemetry-row">
+                <span>FPS Hijo:</span> <b id="childModuleFps" style="color:var(--accent-neon);">-- FPS</b>
+            </div>
+            <div class="telemetry-row">
+                <span id="childMetricKey">Métrica:</span> <b id="childMetricVal" style="color:var(--accent-warn);">--</b>
+            </div>
+            <div class="telemetry-row">
+                <span>Detalle:</span> <small id="childSubtext" style="color:var(--text-dim); font-size:10px;">Enlazado</small>
+            </div>
+        </div>
+    </aside>
+
+    <!-- VIEWPORT DE PROYECTOS -->
+    <main class="viewport-container">
+        <iframe id="moduleFrame" title="Módulo Activo" src="html juego de vida automata/index.html"></iframe>
+    </main>
+
+    <script>
+        /**
+         * ============================================================================
+         * MASTER LAUNCHER CONTROLLER & WEB WORKER BRIDGE
+         * ============================================================================
+         */
+        const iframe = document.getElementById('moduleFrame');
+        const navButtons = document.querySelectorAll('.nav-btn');
+        const sidebar = document.getElementById('sidebar');
+        const btnToggleSidebar = document.getElementById('btnToggleSidebar');
+        const toggleIcon = document.getElementById('toggleIcon');
+
+        // Lógica de Plegado / Desplegado con persistencia
+        const setSidebarCollapsed = (isCollapsed) => {
+            sidebar.classList.toggle('collapsed', isCollapsed);
+            toggleIcon.textContent = isCollapsed ? '▶' : '◀';
+            btnToggleSidebar.title = isCollapsed ? 'Desplegar Barra Lateral' : 'Plegar Barra Lateral';
+            try {
+                localStorage.setItem('master_suite_sidebar_collapsed', isCollapsed ? '1' : '0');
+            } catch (e) {}
+        };
+
+        btnToggleSidebar.addEventListener('click', () => {
+            const isCurrentlyCollapsed = sidebar.classList.contains('collapsed');
+            setSidebarCollapsed(!isCurrentlyCollapsed);
+        });
+
+        if (localStorage.getItem('master_suite_sidebar_collapsed') === '1') {
+            setSidebarCollapsed(true);
+        }
+
+        // Receptor del Puente de Telemetría Global Bidireccional
+        window.addEventListener('message', (event) => {
+            if (!event.data || event.data.type !== 'telemetry_bridge') return;
+            const data = event.data;
+            const nameEl = document.getElementById('childModuleName');
+            const fpsEl = document.getElementById('childModuleFps');
+            const keyEl = document.getElementById('childMetricKey');
+            const valEl = document.getElementById('childMetricVal');
+            const subEl = document.getElementById('childSubtext');
+
+            if (nameEl && data.moduleName) nameEl.textContent = data.moduleName;
+            if (fpsEl && data.fps !== undefined) {
+                fpsEl.textContent = `${data.fps} FPS`;
+                fpsEl.style.color = data.fps >= 55 ? 'var(--accent-neon)' : 'var(--accent-warn)';
+            }
+            if (keyEl && data.metricKey) keyEl.textContent = `${data.metricKey}:`;
+            if (valEl && data.metricValue) valEl.textContent = data.metricValue;
+            if (subEl && data.subtext) subEl.textContent = data.subtext;
+        });
+
+        // Lógica de navegación entre módulos sin perder contexto
+        navButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                navButtons.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                const targetUrl = btn.dataset.url;
+                iframe.src = targetUrl;
+            });
+        });
+
+        // Simulación de Hilo Web Worker secundario para telemetría de rendimiento global
+        const wCanvas = document.getElementById('workerCanvas');
+        const wCtx = wCanvas.getContext('2d', { alpha: false });
+        const historyData = new Uint8Array(60).fill(25);
+
+        // Creamos un Blob simulando un Web Worker en tiempo de ejecución para monitoreo CPU
+        const workerCode = `
+            self.onmessage = function(e) {
+                if (e.data === 'ping') {
+                    const t0 = performance.now();
+                    // Cómputo pesado simulado en hilo aislado
+                    let sum = 0;
+                    for(let i=0; i<150000; i++) sum += Math.sqrt(i);
+                    const elapsed = performance.now() - t0;
+                    self.postMessage({ elapsed, sum });
+                }
+            };
+        `;
+        let worker = null;
+        try {
+            const blob = new Blob([workerCode], { type: 'application/javascript' });
+            worker = new Worker(URL.createObjectURL(blob));
+        } catch (e) {
+            console.warn("Web Worker en Blob no permitido (ej. protocolo file://). Usando simulación local.", e);
+        }
+
+        const coresEl = document.getElementById('workerCores');
+        if (coresEl) {
+            coresEl.textContent = `${navigator.hardwareConcurrency || 4} Cores`;
+        }
+
+        const renderTelemetryGraph = (elapsed) => {
+            const ms = elapsed.toFixed(2);
+            const pingEl = document.getElementById('workerPing');
+            if (pingEl) pingEl.textContent = `${ms} ms`;
+
+            historyData.copyWithin(0, 1);
+            historyData[historyData.length - 1] = Math.min(38, Math.max(2, Math.round(elapsed * 10)));
+
+            // Renderizar gráfica de latencia del worker
+            wCtx.fillStyle = '#030508';
+            wCtx.fillRect(0, 0, wCanvas.width, wCanvas.height);
+
+            const bw = wCanvas.width / historyData.length;
+            for (let i = 0; i < historyData.length; i++) {
+                const val = historyData[i];
+                wCtx.fillStyle = '#00ff9d';
+                wCtx.fillRect(i * bw, wCanvas.height - val, bw - 0.5, val);
+            }
+        };
+
+        if (worker) {
+            worker.onmessage = function (e) {
+                renderTelemetryGraph(e.data.elapsed);
+            };
+
+            // Enviar pulso de sincronización al Worker cada 400ms
+            setInterval(() => {
+                worker.postMessage('ping');
+            }, 400);
+        } else {
+            const stateEl = document.getElementById('workerState');
+            if (stateEl) stateEl.textContent = 'ACTIVO (LOCAL)';
+            setInterval(() => {
+                const t0 = performance.now();
+                let sum = 0;
+                for (let i = 0; i < 150000; i++) sum += Math.sqrt(i);
+                const elapsed = performance.now() - t0;
+                renderTelemetryGraph(elapsed);
+            }, 400);
+        }
+    </script>
+</body>
+
+</html>

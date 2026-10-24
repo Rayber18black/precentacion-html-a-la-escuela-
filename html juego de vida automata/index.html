@@ -1,0 +1,2110 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CELL-ENGINE AAA // Framebuffer & Spatial-Hash</title>
+    <style>
+        :root {
+            --bg-void: #030508;
+            --bg-hud: rgba(10, 15, 24, 0.88);
+            --bg-panel: #090d14;
+            --border-tech: #1e293b;
+            --accent-primary: #00ffcc;
+            --accent-secondary: #0099ff;
+            --accent-warn: #ffaa00;
+            --accent-danger: #ff2a55;
+            --text-main: #e2e8f0;
+            --text-dim: #64748b;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-void);
+            color: var(--text-main);
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+        }
+
+        /* VIEWPORT PRINCIPAL */
+        .viewport {
+            flex: 1;
+            position: relative;
+            background: radial-gradient(circle at center, #070c14 0%, #020406 100%);
+            overflow: hidden;
+            cursor: crosshair;
+        }
+
+        #renderCanvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            image-rendering: pixelated;
+            /* Nitidez total a nivel de píxel al hacer Zoom */
+        }
+
+        /* HUD SUPERIOR ESTILO MOTOR GRÁFICO */
+        .hud-top-bar {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            right: 12px;
+            display: flex;
+            justify-content: space-between;
+            pointer-events: none;
+            gap: 10px;
+        }
+
+        .hud-group {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .hud-chip {
+            background: var(--bg-hud);
+            border: 1px solid var(--border-tech);
+            border-left: 3px solid var(--accent-primary);
+            backdrop-filter: blur(8px);
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-family: 'Consolas', monospace;
+            color: var(--text-main);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+        }
+
+        .hud-chip span {
+            color: var(--accent-primary);
+            font-weight: 700;
+        }
+
+        /* BARRA INFERIOR DE HERRAMIENTAS INTERACTIVAS */
+        .hud-bottom-bar {
+            position: absolute;
+            bottom: 14px;
+            left: 14px;
+            right: 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            pointer-events: none;
+        }
+
+        .controls-legend {
+            background: var(--bg-hud);
+            border: 1px solid var(--border-tech);
+            backdrop-filter: blur(8px);
+            padding: 8px 14px;
+            border-radius: 6px;
+            font-size: 11.5px;
+            color: var(--text-dim);
+            display: flex;
+            gap: 16px;
+        }
+
+        .controls-legend b {
+            color: var(--accent-primary);
+            font-family: 'Consolas', monospace;
+        }
+
+        /* PANEL DE INSPECTOR AAA (DERECHA) */
+        .inspector {
+            width: 310px;
+            min-width: 310px;
+            background-color: var(--bg-panel);
+            border-left: 1px solid var(--border-tech);
+            display: flex;
+            flex-direction: column;
+            padding: 14px;
+            gap: 12px;
+            overflow-y: auto;
+            z-index: 20;
+        }
+
+        .engine-brand {
+            border-bottom: 1px solid var(--border-tech);
+            padding-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .engine-brand h1 {
+            font-size: 15px;
+            font-weight: 800;
+            letter-spacing: 1px;
+            color: var(--accent-primary);
+            font-family: 'Consolas', monospace;
+        }
+
+        .engine-version {
+            font-size: 10px;
+            background: rgba(0, 255, 204, 0.12);
+            color: var(--accent-primary);
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+
+        .panel-section {
+            background: #05080d;
+            border: 1px solid #141d2b;
+            border-radius: 6px;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .section-title {
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: var(--accent-secondary);
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .btn-row {
+            display: flex;
+            gap: 6px;
+        }
+
+        .btn-grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+        }
+
+        .btn {
+            flex: 1;
+            background: #111823;
+            color: var(--text-main);
+            border: 1px solid #223044;
+            padding: 7px 8px;
+            border-radius: 4px;
+            font-size: 11.5px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.12s ease;
+            text-align: center;
+        }
+
+        .btn:hover {
+            background: #1a2536;
+            border-color: var(--accent-primary);
+            color: #fff;
+        }
+
+        .btn.active-mode {
+            background: rgba(0, 255, 204, 0.16);
+            border-color: var(--accent-primary);
+            color: var(--accent-primary);
+            box-shadow: inset 0 0 8px rgba(0, 255, 204, 0.25);
+        }
+
+        .btn.primary {
+            background: #00b38f;
+            border-color: var(--accent-primary);
+            color: #02100d;
+            font-weight: 700;
+        }
+
+        .btn.primary:hover {
+            background: var(--accent-primary);
+        }
+
+        .btn.danger:hover {
+            border-color: var(--accent-danger);
+            color: var(--accent-danger);
+        }
+
+        .slider-row {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .slider-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: var(--text-dim);
+        }
+
+        .slider-label b {
+            color: var(--text-main);
+            font-family: 'Consolas', monospace;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            height: 4px;
+            accent-color: var(--accent-primary);
+            cursor: pointer;
+        }
+
+        select {
+            background: #111823;
+            color: var(--text-main);
+            border: 1px solid #223044;
+            padding: 6px 8px;
+            border-radius: 4px;
+            font-size: 11.5px;
+            outline: none;
+            cursor: pointer;
+        }
+
+        select:focus {
+            border-color: var(--accent-primary);
+        }
+
+        /* TELEMETRÍA Y PROFILER */
+        .telemetry-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+        }
+
+        .metric-card {
+            background: #090e17;
+            border: 1px solid #152030;
+            padding: 6px 8px;
+            border-radius: 4px;
+        }
+
+        .metric-card small {
+            display: block;
+            font-size: 9.5px;
+            color: var(--text-dim);
+            text-transform: uppercase;
+        }
+
+        .metric-card strong {
+            font-size: 13px;
+            font-family: 'Consolas', monospace;
+            color: var(--text-main);
+        }
+
+        #profilerCanvas {
+            width: 100%;
+            height: 54px;
+            background: #04070b;
+            border: 1px solid #162234;
+            border-radius: 4px;
+            display: block;
+        }
+
+        /* RADAR HOLOGRÁFICO MINIMAPA (FASE 4) */
+        .radar-container {
+            position: absolute;
+            bottom: 58px;
+            left: 14px;
+            width: 145px;
+            background: rgba(8, 13, 22, 0.88);
+            border: 1px solid #1e293b;
+            border-top: 2px solid var(--accent-primary);
+            border-radius: 6px;
+            backdrop-filter: blur(8px);
+            padding: 5px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+            z-index: 15;
+            cursor: crosshair;
+            transition: border-color 0.15s ease;
+        }
+
+        .radar-container:hover {
+            border-color: var(--accent-primary);
+        }
+
+        .radar-header {
+            display: flex;
+            justify-content: space-between;
+            font-size: 9px;
+            font-family: 'Consolas', monospace;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .radar-header span:last-child {
+            color: var(--accent-primary);
+            font-weight: 700;
+        }
+
+        #radarCanvas {
+            width: 100%;
+            height: 82px;
+            background: #020408;
+            border: 1px solid #141f2e;
+            border-radius: 4px;
+            display: block;
+        }
+
+        /* MODAL DE IMPORTACIÓN UNIVERSAL RLE */
+        .rle-modal-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(3, 5, 8, 0.78);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+
+        .rle-modal-overlay.hidden {
+            display: none;
+        }
+
+        .rle-modal-card {
+            background: #090e18;
+            border: 1px solid #1e293b;
+            border-top: 3px solid var(--accent-primary);
+            border-radius: 8px;
+            width: 480px;
+            max-width: 90vw;
+            padding: 18px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.8);
+        }
+
+        .rle-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .rle-modal-header h3 {
+            font-size: 13px;
+            font-family: 'Consolas', monospace;
+            color: var(--accent-primary);
+            font-weight: 700;
+        }
+
+        .btn-close-modal {
+            background: transparent;
+            border: none;
+            color: var(--text-dim);
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        .btn-close-modal:hover {
+            color: var(--accent-danger);
+        }
+
+        .rle-modal-desc {
+            font-size: 11.5px;
+            color: #94a3b8;
+            line-height: 1.4;
+        }
+
+        .rle-presets-row {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            font-size: 11px;
+            color: var(--text-dim);
+            flex-wrap: wrap;
+        }
+
+        .btn-preset {
+            background: #111827;
+            border: 1px solid #1f293d;
+            color: var(--accent-secondary);
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 10.5px;
+            cursor: pointer;
+        }
+
+        .btn-preset:hover {
+            border-color: var(--accent-secondary);
+            background: rgba(0, 153, 255, 0.15);
+        }
+
+        #rleTextarea {
+            width: 100%;
+            height: 115px;
+            background: #04060a;
+            border: 1px solid #1e293b;
+            border-radius: 4px;
+            color: var(--text-main);
+            font-family: 'Consolas', monospace;
+            font-size: 11px;
+            padding: 8px;
+            resize: none;
+            outline: none;
+        }
+
+        #rleTextarea:focus {
+            border-color: var(--accent-primary);
+        }
+
+        .rle-modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+        }
+    </style>
+
+    <!-- MODO SIMULACIÓN PURA PARA DIAPOSITIVAS (CERO MENÚS, CERO PANELES, CERO TEXTO) -->
+    <script>
+        (function() {
+            function activateClean() {
+                var isClean = window.location.search.indexOf('clean') !== -1 ||
+                              window.location.hash.indexOf('clean') !== -1 ||
+                              window.name.indexOf('clean') !== -1 ||
+                              (window.self !== window.top && window.name !== 'launcher-frame');
+                if (isClean) {
+                    document.documentElement.classList.add('pure-simulation-mode');
+                    if (document.body) document.body.classList.add('pure-simulation-mode');
+                }
+            }
+            activateClean();
+            window.addEventListener('DOMContentLoaded', activateClean);
+        })();
+    </script>
+    <style>
+        html.pure-simulation-mode,
+        html.pure-simulation-mode body {
+            width: 100vw !important;
+            height: 100vh !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: hidden !important;
+            background: #020408 !important;
+        }
+
+        html.pure-simulation-mode aside,
+        html.pure-simulation-mode header,
+        html.pure-simulation-mode .inspector,
+        html.pure-simulation-mode .sidebar,
+        html.pure-simulation-mode .hud-top-bar,
+        html.pure-simulation-mode .hud-bottom-bar,
+        html.pure-simulation-mode #radarContainer,
+        html.pure-simulation-mode #rleModal,
+        html.pure-simulation-mode .controls-legend,
+        html.pure-simulation-mode .hud-chip,
+        html.pure-simulation-mode .engine-brand,
+        html.pure-simulation-mode .panel-section {
+            display: none !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+            max-width: 0 !important;
+            max-height: 0 !important;
+            width: 0 !important;
+            height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            border: none !important;
+        }
+
+        html.pure-simulation-mode .viewport {
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            flex: none !important;
+            border: none !important;
+            overflow: hidden !important;
+        }
+
+        html.pure-simulation-mode canvas,
+        html.pure-simulation-mode #renderCanvas {
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            display: block !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+    </style>
+
+</head>
+
+<body>
+
+    <!-- VIEWPORT PRINCIPAL -->
+    <main class="viewport" id="viewport">
+        <canvas id="renderCanvas"></canvas>
+
+        <!-- MODAL DE IMPORTACIÓN UNIVERSAL RLE (LIFEWIKI) -->
+        <div id="rleModal" class="rle-modal-overlay hidden">
+            <div class="rle-modal-card">
+                <div class="rle-modal-header">
+                    <h3>📥 IMPORTADOR UNIVERSAL RLE (LIFEWIKI)</h3>
+                    <button id="btnCloseRle" class="btn-close-modal">✕</button>
+                </div>
+                <p class="rle-modal-desc">Pega cualquier código <b>Run Length Encoded (.rle)</b> estándar de LifeWiki, ConwayLife o Golly para inyectarlo en el universo:</p>
+                <div class="rle-presets-row">
+                    <span>Presets:</span>
+                    <button class="btn-preset" data-preset="acorn">Acorn (Metusalén)</button>
+                    <button class="btn-preset" data-preset="simkin">Cañón Simkin</button>
+                    <button class="btn-preset" data-preset="copperhead">Copperhead (Nave)</button>
+                </div>
+                <textarea id="rleTextarea" placeholder="#N Simkin Glider Gun&#10;x = 33, y = 21, rule = B3/S23&#10;2b2o$2b2o4$6b2o$6b2o..."></textarea>
+                <div class="rle-modal-footer">
+                    <button id="btnPasteRle" class="btn">📋 Pegar Portapapeles</button>
+                    <button id="btnInjectRle" class="btn primary">⚡ Inyectar en el Centro</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- HUD SUPERIOR DE TELEMETRÍA -->
+        <div class="hud-top-bar">
+            <div class="hud-group">
+                <div class="hud-chip">PIPELINE: <span>32-BIT RGBA FRAMEBUFFER</span></div>
+                <div class="hud-chip">ALGORITMO: <span>ACTIVE-SET BITMASK O(A)</span></div>
+                <div class="hud-chip">HILO: <span style="color:var(--accent-primary);">DESACOPLADO 120 FPS</span></div>
+                <div class="hud-chip">REGLA: <span id="hudRule">B3/S23 (Conway)</span></div>
+            </div>
+            <div class="hud-group">
+                <div class="hud-chip">ZOOM: <span id="hudZoom">3.0x</span></div>
+                <div class="hud-chip">HERRAMIENTA: <span id="hudTool">Pincel Continuo</span></div>
+            </div>
+        </div>
+
+        <!-- RADAR HOLOGRÁFICO MINIMAPA (FASE 4) -->
+        <div id="radarContainer" class="radar-container" title="Clic o arrastrar para navegar en el universo">
+            <div class="radar-header">
+                <span>RADAR TÁCTICO</span>
+                <span id="radarCoords">X:0 Y:0</span>
+            </div>
+            <canvas id="radarCanvas" width="135" height="76"></canvas>
+        </div>
+
+        <!-- LEYENDA INFERIOR -->
+        <div class="hud-bottom-bar">
+            <div class="controls-legend">
+                <span><b>Clic Izq:</b> Pintar / Estampar</span>
+                <span><b>Clic Der:</b> Borrar</span>
+                <span><b>Rueda Mouse:</b> Zoom Óptico</span>
+                <span><b>Alt + Arrastrar:</b> Mover Cámara</span>
+                <span><b>Espacio:</b> Play/Pausa</span>
+            </div>
+        </div>
+    </main>
+
+    <!-- INSPECTOR LATERAL DE MOTOR AAA -->
+    <aside class="inspector">
+        <div class="engine-brand">
+            <h1>CELL-ENGINE // PRO</h1>
+            <span class="engine-version">v3.0 AAA</span>
+        </div>
+
+        <!-- SECCIÓN 0: ARQUITECTURA DE COMPUTO (FASE 4: BITBOARD & LENIA) -->
+        <div class="panel-section">
+            <div class="section-title">
+                <span>Arquitectura del Motor</span>
+                <span id="engineBadge" style="color:#00ffcc; font-size:9.5px;">ACTIVE-SET</span>
+            </div>
+            <div class="slider-row">
+                <div class="slider-label"><span>Núcleo de Simulación</span></div>
+                <select id="selectEngineMode" title="Seleccionar Motor de Simulación" aria-label="Seleccionar Motor de Simulación">
+                    <option value="active_set">1. Active-Set O(A) (Conway B/S Tradicional)</option>
+                    <option value="bitboard">2. ⚡ Motor Bitboard Vectorizado (500+ Gen/s)</option>
+                    <option value="lenia">3. 🦠 Autómata Continuo: Lenia (SmoothLife)</option>
+                </select>
+            </div>
+            <button id="btnTurboBitboard" class="btn" style="font-weight:700;">⚡ Activar Modo Turbo 500+ TPS</button>
+        </div>
+
+        <!-- SECCIÓN 1: CONTROL DE TIEMPO -->
+        <div class="panel-section">
+            <div class="section-title">
+                <span>Simulación & Reloj</span>
+                <span id="stateBadge" style="color:#00ffcc;">● ACTIVO</span>
+            </div>
+            <div class="btn-row">
+                <button id="btnPlay" class="btn primary">Pausar (Espacio)</button>
+                <button id="btnStep" class="btn">Paso (+1)</button>
+            </div>
+            <div class="btn-row">
+                <button id="btnRandom" class="btn">Caos Estocástico</button>
+                <button id="btnClear" class="btn danger">Purgar RAM</button>
+            </div>
+            <div class="slider-row">
+                <div class="slider-label"><span>Frecuencia de Simulación</span><b id="valTps">60 Gen/s</b></div>
+                <input type="range" id="rangeTps" min="1" max="500" value="60">
+            </div>
+        </div>
+
+        <!-- SECCIÓN 2: REGLAS DEL UNIVERSO Y ESTÉTICA -->
+        <div class="panel-section">
+            <div class="section-title"><span>Física Celular & Shaders</span></div>
+            <div class="slider-row">
+                <div class="slider-label"><span>Leyes del Autómata (Notación B/S)</span></div>
+                <select id="selectRule" title="Leyes del Autómata" aria-label="Leyes del Autómata">
+                    <option value="conway">Conway's Life (B3/S23 - Equilibrado)</option>
+                    <option value="highlife">HighLife (B36/S23 - Autorreplicante)</option>
+                    <option value="daynight">Day & Night (B3678/S34678 - Simétrico)</option>
+                    <option value="seeds">Seeds (B2/S - Supernova Explosiva)</option>
+                </select>
+            </div>
+            <div class="slider-row">
+                <div class="slider-label"><span>Paleta de Color del Framebuffer</span></div>
+                <select id="selectPalette" title="Paleta de Color" aria-label="Paleta de Color">
+                    <option value="cyber">Cyberpunk Neon (Cian → Esmeralda → Violeta)</option>
+                    <option value="thermal">Termografía Infrarroja (Blanco → Oro → Rojo)</option>
+                    <option value="matrix">Bio-Matrix (Lima Eléctrico → Oscuro)</option>
+                </select>
+            </div>
+            <div class="slider-row">
+                <div class="slider-label"><span>Estela de Fosforescencia (Decay)</span><b id="valDecay">Activo</b></div>
+                <input type="range" id="rangeDecay" min="1" max="40" value="12">
+            </div>
+        </div>
+
+        <!-- SECCIÓN 3: PINCEL Y ESTAMPADO HOLOGRÁFICO -->
+        <div class="panel-section">
+            <div class="section-title"><span>Herramientas de Inyección</span></div>
+            <div class="btn-grid-2">
+                <button class="btn tool-btn active-mode" data-tool="brush">Pincel Bresenham</button>
+                <button class="btn tool-btn" data-tool="spray">Aerosol Cuántico</button>
+            </div>
+            <div class="slider-row">
+                <div class="slider-label"><span>Radio de Brocha</span><b id="valBrush">1 px</b></div>
+                <input type="range" id="rangeBrush" min="1" max="16" value="1">
+            </div>
+
+            <!-- Simetría Procedural (Fase 4) -->
+            <div class="slider-row" style="margin-top:2px;">
+                <div class="slider-label"><span>Simetría Radial Procedural</span></div>
+                <select id="selectSymmetry" title="Seleccionar Simetría" aria-label="Seleccionar Simetría">
+                    <option value="none">Sin Simetría (Puntero Libre)</option>
+                    <option value="quad">Simetría 4-Ejes (Cuádruple C4)</option>
+                    <option value="hex">Simetría 6-Ejes (Hexagonal C6)</option>
+                    <option value="kaleido">Caleidoscopio Cristalino (8-Ejes D4)</option>
+                </select>
+            </div>
+            <button id="btnGenMandala" class="btn" style="background:#1e1b4b; border-color:#818cf8; color:#e0e7ff; font-weight:700;">❄️ Generar Mandala Celular Simétrico</button>
+
+            <div class="slider-label" style="margin-top:4px;"><span>Estampado con Holograma (Clic en el lienzo):</span>
+            </div>
+            <div class="btn-grid-2">
+                <button class="btn stamp-btn" data-stamp="gosper">Cañón Gosper</button>
+                <button class="btn stamp-btn" data-stamp="pulsar">Púlsar P-3</button>
+                <button class="btn stamp-btn" data-stamp="replicator">Replicador</button>
+                <button class="btn stamp-btn" data-stamp="spaceship">Crucero Pesado</button>
+            </div>
+            <button id="btnOpenRleModal" class="btn primary" style="margin-top:4px; background:#00d9b5; color:#030508;">📥 Importar RLE (LifeWiki)</button>
+            <button id="btnResetCam" class="btn" style="margin-top:2px;">Centrar Cámara Óptica (1:1)</button>
+        </div>
+
+        <!-- SECCIÓN 4: PROFILER DE RENDIMIENTO AAA -->
+        <div class="panel-section" style="margin-top:auto;">
+            <div class="section-title">
+                <span>Hardware Profiler</span>
+                <span id="fpsCounter" style="color:#00ffcc;">60 FPS</span>
+            </div>
+            <div class="telemetry-grid">
+                <div class="metric-card">
+                    <small>Generación</small>
+                    <strong id="metricGen">0</strong>
+                </div>
+                <div class="metric-card">
+                    <small>Células Vivas</small>
+                    <strong id="metricAlive">0</strong>
+                </div>
+                <div class="metric-card">
+                    <small>Poda Activa O(A)</small>
+                    <strong id="metricPrune">0.0%</strong>
+                </div>
+                <div class="metric-card">
+                    <small>Tiempo Step CPU</small>
+                    <strong id="metricCpu">0.00 ms</strong>
+                </div>
+            </div>
+            <canvas id="profilerCanvas" width="278" height="54"></canvas>
+        </div>
+    </aside>
+
+    <script>
+        /**
+         * ============================================================================
+         * CELL-ENGINE AAA v3.0 - DIRECT 32-BIT FRAMEBUFFER & SPATIAL ACTIVE-SET
+         * ============================================================================
+         * Arquitectura de Motor Gráfico de Alto Rendimiento:
+         * 1. Framebuffer Directo (Uint32Array sobre ImageData): Escribe píxeles de 32-bits
+         *    en formato Little-Endian (0xAABBGGRR) en un OffscreenCanvas del tamaño exacto
+         *    del mundo lógico y lo proyecta con transformación matricial de cámara.
+         * 2. Thermal Phosphor Decay Buffer: Mantiene la energía residual de células muertas
+         *    para renderizar estelas luminosas en tiempo real sin costo extra de GPU.
+         * 3. Tablas de Verdad Bitwise (Lookup Rules): Permite cambiar las reglas físicas
+         *    del universo (Conway, HighLife, Day&Night, Seeds) en O(1) usando máscaras de bits.
+         * 4. Holographic Ghost Preview: Renderiza la silueta translúcida de estructuras
+         *    complejas antes de inyectarlas en la memoria activa.
+         */
+
+        const PATTERNS = {
+            gosper: [
+                [0, 24], [1, 22], [1, 24], [2, 12], [2, 13], [2, 20], [2, 21], [2, 34], [2, 35],
+                [3, 11], [3, 15], [3, 20], [3, 21], [3, 34], [3, 35], [4, 0], [4, 1], [4, 10],
+                [4, 16], [4, 20], [4, 21], [5, 0], [5, 1], [5, 10], [5, 14], [5, 16], [5, 17],
+                [5, 22], [5, 24], [6, 10], [6, 16], [6, 24], [7, 11], [7, 15], [8, 12], [8, 13]
+            ],
+            pulsar: [
+                [2, 0], [3, 0], [4, 0], [8, 0], [9, 0], [10, 0],
+                [0, 2], [5, 2], [7, 2], [12, 2], [0, 3], [5, 3], [7, 3], [12, 3], [0, 4], [5, 4], [7, 4], [12, 4],
+                [2, 5], [3, 5], [4, 5], [8, 5], [9, 5], [10, 5],
+                [2, 7], [3, 7], [4, 7], [8, 7], [9, 7], [10, 7],
+                [0, 8], [5, 8], [7, 8], [12, 8], [0, 9], [5, 9], [7, 9], [12, 9], [0, 10], [5, 10], [7, 10], [12, 10],
+                [2, 12], [3, 12], [4, 12], [8, 12], [9, 12], [10, 12]
+            ],
+            replicator: [
+                [0, 2], [0, 3], [0, 4], [1, 1], [1, 4], [2, 0], [2, 4], [3, 0], [3, 1], [3, 2], [4, 0], [4, 1], [4, 2]
+            ],
+            spaceship: [
+                [0, 2], [0, 3], [1, 0], [1, 1], [1, 3], [1, 4], [2, 0], [2, 1], [2, 2], [2, 3], [3, 1], [3, 2]
+            ]
+        };
+
+        // Reglas expresadas en máscaras de bits de 9 posiciones (0..8 vecinos)
+        const RULESETS = {
+            conway: { name: 'B3/S23 (Conway)', birth: (1 << 3), survive: (1 << 2) | (1 << 3) },
+            highlife: { name: 'B36/S23 (HighLife)', birth: (1 << 3) | (1 << 6), survive: (1 << 2) | (1 << 3) },
+            daynight: { name: 'B3678/S34678 (D&N)', birth: (1 << 3) | (1 << 6) | (1 << 7) | (1 << 8), survive: (1 << 3) | (1 << 4) | (1 << 6) | (1 << 7) | (1 << 8) },
+            seeds: { name: 'B2/S (Seeds Explosivo)', birth: (1 << 2), survive: 0 }
+        };
+
+        const RLE_PRESETS = {
+            acorn: `#N Acorn (Metusalén legendario de 7 celdas)\nx = 7, y = 3, rule = B3/S23\nbo5b$3bo3b$2o2b3o!`,
+            simkin: `#N Simkin Glider Gun (Periodo 120)\nx = 33, y = 21, rule = B3/S23\n2b2o$2b2o4$6b2o$6b2o4$29b2o$29b2o2$22b2o$21bo2bo$21b2ob2o$27b2o$21b2ob2o$21bo2bo$22b2o!`,
+            copperhead: `#N Copperhead (Nave espacial ortogonal)\nx = 8, y = 12, rule = B3/S23\nb2o2b2o$b2o2b2o2$2b4o2$2b4o$o2b2o2bo$o6bo2$2b4o$3b2o$3b2o!`
+        };
+
+        function parseRLE(rleText) {
+            const lines = rleText.split(/\r?\n/);
+            let patternStr = '';
+            let rule = null;
+            let width = 0;
+            let height = 0;
+
+            for (let line of lines) {
+                line = line.trim();
+                if (!line || line.startsWith('#')) continue;
+                if (line.includes('x =') || line.includes('x=')) {
+                    const mX = line.match(/x\s*=\s*(\d+)/i);
+                    const mY = line.match(/y\s*=\s*(\d+)/i);
+                    const mR = line.match(/rule\s*=\s*([^\s,]+)/i);
+                    if (mX) width = parseInt(mX[1], 10);
+                    if (mY) height = parseInt(mY[1], 10);
+                    if (mR) rule = mR[1];
+                    continue;
+                }
+                patternStr += line;
+                if (line.includes('!')) break;
+            }
+
+            const cells = [];
+            let curX = 0;
+            let curY = 0;
+            let count = 0;
+
+            for (let i = 0; i < patternStr.length; i++) {
+                const ch = patternStr[i];
+                if (ch >= '0' && ch <= '9') {
+                    count = count * 10 + (ch.charCodeAt(0) - 48);
+                } else if (ch === 'b') {
+                    curX += (count || 1);
+                    count = 0;
+                } else if (ch === 'o' || (ch >= 'A' && ch <= 'Z')) {
+                    const run = count || 1;
+                    for (let k = 0; k < run; k++) {
+                        cells.push([curY, curX + k]);
+                    }
+                    curX += run;
+                    count = 0;
+                } else if (ch === '$') {
+                    curY += (count || 1);
+                    curX = 0;
+                    count = 0;
+                } else if (ch === '!') {
+                    break;
+                }
+            }
+
+            return { cells, width, height, rule };
+        }
+
+        class AAACellularEngine {
+            constructor() {
+                this.canvas = document.getElementById('renderCanvas');
+                this.ctx = this.canvas.getContext('2d', { alpha: false });
+                this.profCanvas = document.getElementById('profilerCanvas');
+                this.profCtx = this.profCanvas.getContext('2d', { alpha: false });
+
+                // Dimensiones del Universo Lógico (Múltiplo exacto de 32 para Bitboard Vectorizado)
+                this.cols = 384; // 12 palabras de 32 bits por fila
+                this.rows = 240;
+                this.wordsPerRow = 12;
+                this.totalCells = this.cols * this.rows;
+
+                // Superficie Offscreen para volcado directo de memoria de 32-bits
+                this.fbCanvas = document.createElement('canvas');
+                this.fbCanvas.width = this.cols;
+                this.fbCanvas.height = this.rows;
+                this.fbCtx = this.fbCanvas.getContext('2d', { alpha: false });
+                this.imageData = this.fbCtx.createImageData(this.cols, this.rows);
+                this.pixelBuffer32 = new Uint32Array(this.imageData.data.buffer);
+
+                // Buffers de Simulación Tradicional (Active-Set O(A))
+                this.state = new Uint8Array(this.totalCells);
+                this.nextState = new Uint8Array(this.totalCells);
+                this.trail = new Uint8Array(this.totalCells);
+
+                // Estructuras de Poda Espacial O(A)
+                this.activeList = new Uint32Array(this.totalCells);
+                this.nextActiveList = new Uint32Array(this.totalCells);
+                this.activeMask = new Uint8Array(this.totalCells);
+                this.activeCount = 0;
+
+                // Tablas de Adyacencia Toroidal
+                this.leftCol = new Uint16Array(this.cols);
+                this.rightCol = new Uint16Array(this.cols);
+                this.upRowOff = new Uint32Array(this.rows);
+                this.downRowOff = new Uint32Array(this.rows);
+                this.initToroidalLookup();
+
+                // Tablas de Color Precalculadas (LUT 32-bit ABGR)
+                this.aliveLUT = new Uint32Array(256);
+                this.trailLUT = new Uint32Array(256);
+                this.currentPalette = 'cyber';
+                this.buildColorLUTs();
+
+                // FASE 4: 1. Motor Bitboard Vectorizado 32-bits
+                this.totalWords = this.wordsPerRow * this.rows;
+                this.bitboard = new Uint32Array(this.totalWords);
+                this.nextBitboard = new Uint32Array(this.totalWords);
+
+                // FASE 4: 2. Autómata Continuo (Lenia / SmoothLife)
+                this.leniaField = new Float32Array(this.totalCells);
+                this.nextLeniaField = new Float32Array(this.totalCells);
+                this.leniaOffsets = [];
+                this.initLeniaKernel();
+
+                // FASE 4: 3. Minimapa Radar Holográfico
+                this.radarCanvas = document.getElementById('radarCanvas');
+                this.radarCtx = this.radarCanvas ? this.radarCanvas.getContext('2d') : null;
+                this.radarSweepAngle = 0;
+                this.isRadarNavigating = false;
+
+                // FASE 4: 4. Modos y Simetría Procedural
+                this.engineMode = 'active_set'; // 'active_set', 'bitboard', 'lenia'
+                this.isTurboBitboard = false;
+                this.symmetryMode = 'none'; // 'none', 'quad', 'hex', 'kaleido'
+
+                // Cámara 2D (Zoom y Paneo)
+                this.camZoom = 3.2;
+                this.camX = 0;
+                this.camY = 0;
+                this.isPanning = false;
+                this.panStartX = 0;
+                this.panStartY = 0;
+
+                // Parámetros de Simulación y Herramientas
+                this.isRunning = true;
+                this.tps = 60;
+                this.decaySpeed = 12;
+                this.currentRule = RULESETS.conway;
+                this.tool = 'brush';
+                this.activeStamp = null;
+                this.brushRadius = 1;
+
+                // Estado del Mouse
+                this.mouseWorldX = -1;
+                this.mouseWorldY = -1;
+                this.lastWorldX = -1;
+                this.lastWorldY = -1;
+                this.isPainting = false;
+                this.paintValue = 1;
+
+                // Telemetría
+                this.generation = 0;
+                this.aliveCount = 0;
+                this.cpuStepMs = 0;
+                this.lastSimTick = 0;
+                this.frameCount = 0;
+                this.lastFpsTick = performance.now();
+                this.fpsHistory = new Uint8Array(70).fill(60);
+
+                this.resizeViewport();
+                this.centerCamera();
+                this.bindEvents();
+                this.seedDemoScene();
+            }
+
+            initToroidalLookup() {
+                for (let x = 0; x < this.cols; x++) {
+                    this.leftCol[x] = (x === 0) ? this.cols - 1 : x - 1;
+                    this.rightCol[x] = (x === this.cols - 1) ? 0 : x + 1;
+                }
+                for (let y = 0; y < this.rows; y++) {
+                    const up = (y === 0) ? this.rows - 1 : y - 1;
+                    const dn = (y === this.rows - 1) ? 0 : y + 1;
+                    this.upRowOff[y] = up * this.cols;
+                    this.downRowOff[y] = dn * this.cols;
+                }
+            }
+
+            initLeniaKernel() {
+                this.leniaOffsets = [];
+                const R = 9.0;
+                const rIn = 3.2;
+                let totalW = 0;
+                for (let dy = -10; dy <= 10; dy++) {
+                    for (let dx = -10; dx <= 10; dx++) {
+                        const d = Math.sqrt(dx * dx + dy * dy);
+                        if (d >= rIn && d <= R) {
+                            const mid = (R + rIn) * 0.5;
+                            const dev = (R - rIn) * 0.5;
+                            const w = Math.exp(-Math.pow((d - mid) / (dev * 0.7), 2));
+                            this.leniaOffsets.push(dx, dy, w);
+                            totalW += w;
+                        }
+                    }
+                }
+                for (let i = 2; i < this.leniaOffsets.length; i += 3) {
+                    this.leniaOffsets[i] /= totalW;
+                }
+            }
+
+            packABGR(r, g, b) {
+                return (255 << 24) | ((b & 0xFF) << 16) | ((g & 0xFF) << 8) | (r & 0xFF);
+            }
+
+            buildColorLUTs() {
+                for (let i = 0; i < 256; i++) {
+                    const t = i / 255;
+                    if (this.currentPalette === 'cyber') {
+                        if (i === 1) {
+                            this.aliveLUT[i] = this.packABGR(210, 255, 255);
+                        } else if (i < 12) {
+                            this.aliveLUT[i] = this.packABGR(0, 255, 190);
+                        } else if (i < 60) {
+                            this.aliveLUT[i] = this.packABGR(0, 200, 255);
+                        } else {
+                            this.aliveLUT[i] = this.packABGR(130, 80, 255);
+                        }
+                        this.trailLUT[i] = this.packABGR(
+                            Math.floor(4 + t * 10),
+                            Math.floor(7 + t * 65),
+                            Math.floor(13 + t * 95)
+                        );
+                    } else if (this.currentPalette === 'thermal') {
+                        if (i === 1) {
+                            this.aliveLUT[i] = this.packABGR(255, 255, 220);
+                        } else if (i < 15) {
+                            this.aliveLUT[i] = this.packABGR(255, 190, 0);
+                        } else {
+                            this.aliveLUT[i] = this.packABGR(255, 50, 30);
+                        }
+                        this.trailLUT[i] = this.packABGR(
+                            Math.floor(5 + t * 110),
+                            Math.floor(4 + t * 20),
+                            Math.floor(10 + t * 35)
+                        );
+                    } else {
+                        this.aliveLUT[i] = (i === 1)
+                            ? this.packABGR(220, 255, 220)
+                            : this.packABGR(0, Math.max(110, 255 - i * 2), 65);
+                        this.trailLUT[i] = this.packABGR(3, Math.floor(8 + t * 75), 12);
+                    }
+                }
+            }
+
+            resizeViewport() {
+                const vp = document.getElementById('viewport');
+                this.canvas.width = vp.clientWidth || (window.innerWidth - 310);
+                this.canvas.height = vp.clientHeight || window.innerHeight;
+            }
+
+            centerCamera() {
+                const scaleX = this.canvas.width / this.cols;
+                const scaleY = this.canvas.height / this.rows;
+                this.camZoom = Math.min(scaleX, scaleY) * 0.95;
+                this.camX = (this.canvas.width - this.cols * this.camZoom) * 0.5;
+                this.camY = (this.canvas.height - this.rows * this.camZoom) * 0.5;
+                document.getElementById('hudZoom').textContent = `${this.camZoom.toFixed(1)}x`;
+            }
+
+            activateNeighborhood(x, y, list, ref) {
+                const cols = this.cols;
+                const lx = this.leftCol[x];
+                const rx = this.rightCol[x];
+                const uOff = this.upRowOff[y];
+                const mOff = y * cols;
+                const dOff = this.downRowOff[y];
+
+                const n0 = uOff + lx, n1 = uOff + x, n2 = uOff + rx;
+                const n3 = mOff + lx, n4 = mOff + x, n5 = mOff + rx;
+                const n6 = dOff + lx, n7 = dOff + x, n8 = dOff + rx;
+
+                const arr = [n0, n1, n2, n3, n4, n5, n6, n7, n8];
+                for (let i = 0; i < 9; i++) {
+                    const idx = arr[i];
+                    if (this.activeMask[idx] === 0) {
+                        this.activeMask[idx] = 1;
+                        list[ref.count++] = idx;
+                    }
+                }
+            }
+
+            setCellState(x, y, val) {
+                const wx = ((x % this.cols) + this.cols) % this.cols;
+                const wy = ((y % this.rows) + this.rows) % this.rows;
+                const idx = wy * this.cols + wx;
+
+                if (this.engineMode === 'lenia') {
+                    this.leniaField[idx] = val > 0 ? 0.85 : 0.0;
+                    if (val > 0) this.aliveCount++;
+                    return;
+                }
+
+                const prev = this.state[idx];
+                if ((prev > 0) === (val > 0)) return;
+
+                this.state[idx] = val;
+                this.nextState[idx] = val;
+                if (val > 0) {
+                    this.aliveCount++;
+                    this.trail[idx] = 255;
+                } else {
+                    this.aliveCount--;
+                }
+
+                // Sincronizar en el bitboard
+                const wordIdx = wy * this.wordsPerRow + (wx >> 5);
+                const bitPos = wx & 31;
+                if (val > 0) {
+                    this.bitboard[wordIdx] |= (1 << bitPos);
+                } else {
+                    this.bitboard[wordIdx] &= ~(1 << bitPos);
+                }
+
+                const ref = { count: this.activeCount };
+                this.activateNeighborhood(wx, wy, this.activeList, ref);
+                this.activeCount = ref.count;
+            }
+
+            setCellStateSymmetric(cx, cy, val) {
+                if (this.symmetryMode === 'none') {
+                    this.setCellState(cx, cy, val);
+                    return;
+                }
+
+                const midX = this.cols * 0.5;
+                const midY = this.rows * 0.5;
+                const dx = cx - midX;
+                const dy = cy - midY;
+
+                if (this.symmetryMode === 'quad') {
+                    this.setCellState(Math.floor(midX + dx), Math.floor(midY + dy), val);
+                    this.setCellState(Math.floor(midX - dx), Math.floor(midY + dy), val);
+                    this.setCellState(Math.floor(midX + dx), Math.floor(midY - dy), val);
+                    this.setCellState(Math.floor(midX - dx), Math.floor(midY - dy), val);
+                } else if (this.symmetryMode === 'kaleido') {
+                    const pts = [
+                        [dx, dy], [-dx, dy], [dx, -dy], [-dx, -dy],
+                        [dy, dx], [-dy, dx], [dy, -dx], [-dy, -dx]
+                    ];
+                    for (let i = 0; i < 8; i++) {
+                        this.setCellState(Math.floor(midX + pts[i][0]), Math.floor(midY + pts[i][1]), val);
+                    }
+                } else if (this.symmetryMode === 'hex') {
+                    for (let a = 0; a < 6; a++) {
+                        const angle = (a * Math.PI) / 3;
+                        const rx = dx * Math.cos(angle) - dy * Math.sin(angle);
+                        const ry = dx * Math.sin(angle) + dy * Math.cos(angle);
+                        this.setCellState(Math.floor(midX + rx), Math.floor(midY + ry), val);
+                    }
+                }
+            }
+
+            paintBrushAt(cx, cy, stateVal) {
+                const r = this.brushRadius;
+                if (r === 1 && this.tool === 'brush') {
+                    this.setCellStateSymmetric(cx, cy, stateVal);
+                    return;
+                }
+                for (let dy = -r; dy <= r; dy++) {
+                    for (let dx = -r; dx <= r; dx++) {
+                        if (dx * dx + dy * dy <= r * r) {
+                            if (this.tool === 'spray' && stateVal > 0 && Math.random() > 0.35) continue;
+                            this.setCellStateSymmetric(cx + dx, cy + dy, stateVal);
+                        }
+                    }
+                }
+            }
+
+            drawLineBresenham(x0, y0, x1, y1, val) {
+                const dx = Math.abs(x1 - x0);
+                const dy = -Math.abs(y1 - y0);
+                const sx = x0 < x1 ? 1 : -1;
+                const sy = y0 < y1 ? 1 : -1;
+                let err = dx + dy;
+
+                while (true) {
+                    this.paintBrushAt(x0, y0, val);
+                    if (x0 === x1 && y0 === y1) break;
+                    const e2 = 2 * err;
+                    if (e2 >= dy) { err += dy; x0 += sx; }
+                    if (e2 <= dx) { err += dx; y0 += sy; }
+                }
+            }
+
+            /**
+             * Generador Procedural de Mandalas y Cristales de Hielo Simétricos (Fase 4)
+             */
+            generateSymmetricMandala() {
+                this.clearWorld();
+                const midX = Math.floor(this.cols * 0.5);
+                const midY = Math.floor(this.rows * 0.5);
+                const radius = 34;
+
+                for (let r = 2; r < radius; r += 2) {
+                    for (let a = 0; a < 6; a++) {
+                        if (Math.random() > 0.4) {
+                            const ang = (a * Math.PI) / 3;
+                            const x = Math.floor(midX + Math.cos(ang) * r);
+                            const y = Math.floor(midY + Math.sin(ang) * r);
+                            this.setCellState(x, y, 1);
+                        }
+                    }
+                }
+
+                for (let step = 0; step < 8; step++) {
+                    const offset = step * 4;
+                    for (let i = 0; i < 6; i++) {
+                        const ang = (i * Math.PI) / 3 + 0.12;
+                        const x = Math.floor(midX + Math.cos(ang) * offset);
+                        const y = Math.floor(midY + Math.sin(ang) * offset);
+                        this.setCellState(x, y, 1);
+                        this.setCellState(x + 1, y, 1);
+                        this.setCellState(x, y + 1, 1);
+                    }
+                }
+
+                if (this.engineMode === 'bitboard') {
+                    this.syncStateToBitboard();
+                }
+                this.updateTelemetryUI();
+            }
+
+            syncStateToBitboard() {
+                this.bitboard.fill(0);
+                const cols = this.cols;
+                const rows = this.rows;
+                const Ww = this.wordsPerRow;
+                for (let y = 0; y < rows; y++) {
+                    const yOff = y * cols;
+                    const bOff = y * Ww;
+                    for (let x = 0; x < cols; x++) {
+                        if (this.state[yOff + x] > 0) {
+                            const wIdx = bOff + (x >> 5);
+                            this.bitboard[wIdx] |= (1 << (x & 31));
+                        }
+                    }
+                }
+            }
+
+            /**
+             * FASE 4: 1. Motor Bitboard Vectorizado (32 células evaluadas en paralelo por palabra)
+             */
+            stepBitboard() {
+                const t0 = performance.now();
+                const Ww = this.wordsPerRow;
+                const H = this.rows;
+                const bb = this.bitboard;
+                const nbb = this.nextBitboard;
+                let aliveBits = 0;
+
+                for (let y = 0; y < H; y++) {
+                    const yUp = ((y - 1 + H) % H) * Ww;
+                    const yMid = y * Ww;
+                    const yDown = ((y + 1) % H) * Ww;
+
+                    for (let x = 0; x < Ww; x++) {
+                        const xL = (x - 1 + Ww) % Ww;
+                        const xR = (x + 1) % Ww;
+
+                        const u0 = bb[yUp + x];
+                        const uL = (u0 << 1) | (bb[yUp + xL] >>> 31);
+                        const uR = (u0 >>> 1) | (bb[yUp + xR] << 31);
+
+                        const m0 = bb[yMid + x];
+                        const mL = (m0 << 1) | (bb[yMid + xL] >>> 31);
+                        const mR = (m0 >>> 1) | (bb[yMid + xR] << 31);
+
+                        const d0 = bb[yDown + x];
+                        const dL = (d0 << 1) | (bb[yDown + xL] >>> 31);
+                        const dR = (d0 >>> 1) | (bb[yDown + xR] << 31);
+
+                        // Full Adders Bitwise paralelos para 8 vecinos
+                        const s1 = uL ^ u0 ^ uR;
+                        const c1 = (uL & u0) | (u0 & uR) | (uR & uL);
+
+                        const s2 = dL ^ d0 ^ dR;
+                        const c2 = (dL & d0) | (d0 & dR) | (dR & dL);
+
+                        const s3 = s1 ^ s2 ^ mL;
+                        const c3 = (s1 & s2) | (s2 & mL) | (mL & s1);
+
+                        const bit0 = s3 ^ mR;
+                        const c4 = s3 & mR;
+
+                        const cs1 = c1 ^ c2 ^ c3;
+                        const cc1 = (c1 & c2) | (c2 & c3) | (c3 & c1);
+
+                        const bit1 = cs1 ^ c4;
+                        const cc2 = cs1 & c4;
+
+                        const bit2 = cc1 | cc2;
+
+                        // Regla Conway B3/S23 en lógica de bits
+                        const count2 = (~bit0) & bit1 & (~bit2);
+                        const count3 = bit0 & bit1 & (~bit2);
+
+                        const nextWord = count3 | (count2 & m0);
+                        nbb[yMid + x] = nextWord;
+
+                        // Conteo de bits vivos (Hamming Weight O(1))
+                        let v = nextWord - ((nextWord >>> 1) & 0x55555555);
+                        v = (v & 0x33333333) + ((v >>> 2) & 0x33333333);
+                        aliveBits += (((v + (v >>> 4)) & 0x0F0F0F0F) * 0x01010101) >>> 24;
+                    }
+                }
+
+                this.bitboard.set(nbb);
+                this.aliveCount = aliveBits;
+                this.generation++;
+                this.cpuStepMs = performance.now() - t0;
+
+                // Sincronizar al framebuffer para renderizado
+                for (let y = 0; y < H; y++) {
+                    const yOff = y * this.cols;
+                    const bOff = y * Ww;
+                    for (let x = 0; x < Ww; x++) {
+                        const word = bb[bOff + x];
+                        const pxStart = yOff + (x << 5);
+                        for (let b = 0; b < 32; b++) {
+                            const isAlive = (word & (1 << b)) !== 0;
+                            const idx = pxStart + b;
+                            if (isAlive) {
+                                this.state[idx] = Math.min(255, this.state[idx] + 1 || 1);
+                                this.trail[idx] = 255;
+                            } else {
+                                this.state[idx] = 0;
+                            }
+                        }
+                    }
+                }
+            }
+
+            /**
+             * FASE 4: 2. Autómata Continuo (Lenia / SmoothLife con convolución en anillo)
+             */
+            stepLenia() {
+                const t0 = performance.now();
+                const cols = this.cols;
+                const rows = this.rows;
+                const cur = this.leniaField;
+                const nxt = this.nextLeniaField;
+                const offsets = this.leniaOffsets;
+                const numOffsets = offsets.length;
+                const mu = 0.15;
+                const sigma = 0.016;
+                const dt = 0.16;
+                let totalAlive = 0;
+
+                for (let y = 0; y < rows; y++) {
+                    const yOff = y * cols;
+                    for (let x = 0; x < cols; x++) {
+                        const idx = yOff + x;
+                        let U = 0;
+                        for (let k = 0; k < numOffsets; k += 3) {
+                            const ox = offsets[k];
+                            const oy = offsets[k + 1];
+                            const w = offsets[k + 2];
+                            const sx = (x + ox + cols) % cols;
+                            const sy = (y + oy + rows) % rows;
+                            U += cur[sy * cols + sx] * w;
+                        }
+
+                        const diff = (U - mu) / sigma;
+                        const G = 2.0 * Math.exp(-(diff * diff)) - 1.0;
+                        const val = Math.max(0.0, Math.min(1.0, cur[idx] + dt * G));
+                        nxt[idx] = val;
+                        if (val > 0.08) totalAlive++;
+                    }
+                }
+
+                this.leniaField.set(nxt);
+                this.aliveCount = totalAlive;
+                this.generation++;
+                this.cpuStepMs = performance.now() - t0;
+            }
+
+            /**
+             * Paso de Simulación Tradicional (Active-Set O(A))
+             */
+            stepActiveSet() {
+                const t0 = performance.now();
+                const cols = this.cols;
+                const state = this.state;
+                const nextState = this.nextState;
+                const trail = this.trail;
+                const activeList = this.activeList;
+                const count = this.activeCount;
+                const birthMask = this.currentRule.birth;
+                const surviveMask = this.currentRule.survive;
+
+                for (let i = 0; i < count; i++) {
+                    const idx = activeList[i];
+                    nextState[idx] = state[idx];
+                    this.activeMask[idx] = 0;
+                }
+
+                const nextRef = { count: 0 };
+                const transitions = [];
+
+                for (let i = 0; i < count; i++) {
+                    const idx = activeList[i];
+                    const y = (idx / cols) | 0;
+                    const x = idx - (y * cols);
+
+                    const lx = this.leftCol[x];
+                    const rx = this.rightCol[x];
+                    const uOff = this.upRowOff[y];
+                    const mOff = y * cols;
+                    const dOff = this.downRowOff[y];
+
+                    const n =
+                        (state[uOff + lx] > 0) + (state[uOff + x] > 0) + (state[uOff + rx] > 0) +
+                        (state[mOff + lx] > 0) + (state[mOff + rx] > 0) +
+                        (state[dOff + lx] > 0) + (state[dOff + x] > 0) + (state[dOff + rx] > 0);
+
+                    const age = state[idx];
+                    const bit = 1 << n;
+
+                    if (age > 0) {
+                        if ((surviveMask & bit) !== 0) {
+                            if (age < 255) nextState[idx] = age + 1;
+                            if (age < 65 && this.activeMask[idx] === 0) {
+                                this.activeMask[idx] = 1;
+                                this.nextActiveList[nextRef.count++] = idx;
+                            }
+                        } else {
+                            nextState[idx] = 0;
+                            trail[idx] = 220;
+                            this.aliveCount--;
+                            transitions.push(x, y);
+                        }
+                    } else {
+                        if ((birthMask & bit) !== 0) {
+                            nextState[idx] = 1;
+                            trail[idx] = 255;
+                            this.aliveCount++;
+                            transitions.push(x, y);
+                        }
+                    }
+                }
+
+                for (let i = 0; i < transitions.length; i += 2) {
+                    this.activateNeighborhood(transitions[i], transitions[i + 1], this.nextActiveList, nextRef);
+                }
+
+                for (let i = 0; i < count; i++) {
+                    const idx = activeList[i];
+                    state[idx] = nextState[idx];
+                }
+
+                const tmp = this.activeList;
+                this.activeList = this.nextActiveList;
+                this.nextActiveList = tmp;
+                this.activeCount = nextRef.count;
+
+                this.generation++;
+                this.cpuStepMs = performance.now() - t0;
+            }
+
+            stepSimulation() {
+                if (this.engineMode === 'bitboard') {
+                    const stepsPerTick = this.isTurboBitboard ? 8 : 1;
+                    for (let s = 0; s < stepsPerTick; s++) {
+                        this.stepBitboard();
+                    }
+                } else if (this.engineMode === 'lenia') {
+                    this.stepLenia();
+                } else {
+                    this.stepActiveSet();
+                }
+            }
+
+            /**
+             * FASE 4: 3. Minimapa Radar Holográfico con navegación interactiva
+             */
+            drawMinimapRadar() {
+                if (!this.radarCanvas || !this.radarCtx) return;
+                const ctx = this.radarCtx;
+                const rw = this.radarCanvas.width;
+                const rh = this.radarCanvas.height;
+
+                ctx.fillStyle = '#02050b';
+                ctx.fillRect(0, 0, rw, rh);
+
+                // Cuadrícula y retícula holográfica
+                ctx.strokeStyle = 'rgba(0, 255, 204, 0.12)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.arc(rw * 0.5, rh * 0.5, rh * 0.44, 0, Math.PI * 2);
+                ctx.arc(rw * 0.5, rh * 0.5, rh * 0.22, 0, Math.PI * 2);
+                ctx.moveTo(0, rh * 0.5); ctx.lineTo(rw, rh * 0.5);
+                ctx.moveTo(rw * 0.5, 0); ctx.lineTo(rw * 0.5, rh);
+                ctx.stroke();
+
+                // Proyección de densidad celular
+                const scaleX = rw / this.cols;
+                const scaleY = rh / this.rows;
+                ctx.fillStyle = '#00ffcc';
+
+                if (this.engineMode === 'lenia') {
+                    const lenia = this.leniaField;
+                    for (let y = 0; y < this.rows; y += 4) {
+                        const yOff = y * this.cols;
+                        for (let x = 0; x < this.cols; x += 4) {
+                            if (lenia[yOff + x] > 0.18) {
+                                ctx.fillRect(x * scaleX, y * scaleY, 2, 2);
+                            }
+                        }
+                    }
+                } else {
+                    const state = this.state;
+                    for (let y = 0; y < this.rows; y += 4) {
+                        const yOff = y * this.cols;
+                        for (let x = 0; x < this.cols; x += 4) {
+                            if (state[yOff + x] > 0) {
+                                ctx.fillRect(x * scaleX, y * scaleY, 2, 2);
+                            }
+                        }
+                    }
+                }
+
+                // Línea de barrido holográfico
+                this.radarSweepAngle = (this.radarSweepAngle + 0.05) % (Math.PI * 2);
+                ctx.strokeStyle = 'rgba(0, 255, 204, 0.4)';
+                ctx.beginPath();
+                ctx.moveTo(rw * 0.5, rh * 0.5);
+                ctx.lineTo(
+                    rw * 0.5 + Math.cos(this.radarSweepAngle) * rw * 0.5,
+                    rh * 0.5 + Math.sin(this.radarSweepAngle) * rh * 0.5
+                );
+                ctx.stroke();
+
+                // Rectángulo activo de cámara (Frustum Óptico)
+                const worldW = this.canvas.width / this.camZoom;
+                const worldH = this.canvas.height / this.camZoom;
+                const worldLeft = -this.camX / this.camZoom;
+                const worldTop = -this.camY / this.camZoom;
+
+                const rx = worldLeft * scaleX;
+                const ry = worldTop * scaleY;
+                const rvw = worldW * scaleX;
+                const rvh = worldH * scaleY;
+
+                ctx.strokeStyle = '#ffaa00';
+                ctx.lineWidth = 1.4;
+                ctx.strokeRect(rx, ry, rvw, rvh);
+
+                const coordsEl = document.getElementById('radarCoords');
+                if (coordsEl) {
+                    coordsEl.textContent = `X:${Math.max(0, Math.floor(worldLeft))} Y:${Math.max(0, Math.floor(worldTop))}`;
+                }
+            }
+
+            renderFrame() {
+                const total = this.totalCells;
+                const px32 = this.pixelBuffer32;
+
+                if (this.engineMode === 'lenia') {
+                    // Renderizado Bioluminiscente de Campo Escalar Continuo Lenia
+                    const lenia = this.leniaField;
+                    for (let i = 0; i < total; i++) {
+                        const a = lenia[i];
+                        if (a < 0.02) {
+                            px32[i] = 0xFF080402;
+                        } else {
+                            const r = Math.min(255, Math.floor(Math.sin(a * Math.PI) * 130 + a * 255));
+                            const g = Math.min(255, Math.floor(Math.sin(a * Math.PI * 0.8) * 230));
+                            const b = Math.min(255, Math.floor(Math.cos(a * Math.PI * 0.5) * 255 + a * 60));
+                            px32[i] = (255 << 24) | (b << 16) | (g << 8) | r;
+                        }
+                    }
+                } else {
+                    // Renderizado Framebuffer Directo 32-bits
+                    const state = this.state;
+                    const trail = this.trail;
+                    const aliveLUT = this.aliveLUT;
+                    const trailLUT = this.trailLUT;
+                    const decay = this.decaySpeed;
+
+                    for (let i = 0; i < total; i++) {
+                        const age = state[i];
+                        if (age > 0) {
+                            px32[i] = aliveLUT[age];
+                        } else {
+                            let tr = trail[i];
+                            if (tr > 0) {
+                                tr = (tr > decay) ? tr - decay : 0;
+                                trail[i] = tr;
+                            }
+                            px32[i] = trailLUT[tr];
+                        }
+                    }
+                }
+
+                this.fbCtx.putImageData(this.imageData, 0, 0);
+
+                const ctx = this.ctx;
+                ctx.fillStyle = '#020407';
+                ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+                ctx.save();
+                ctx.translate(this.camX, this.camY);
+                ctx.scale(this.camZoom, this.camZoom);
+                ctx.imageSmoothingEnabled = false;
+                ctx.drawImage(this.fbCanvas, 0, 0);
+
+                if (this.camZoom >= 5.5) {
+                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+                    ctx.lineWidth = 1 / this.camZoom;
+                    ctx.beginPath();
+                    for (let x = 0; x <= this.cols; x++) {
+                        ctx.moveTo(x, 0); ctx.lineTo(x, this.rows);
+                    }
+                    for (let y = 0; y <= this.rows; y++) {
+                        ctx.moveTo(0, y); ctx.lineTo(this.cols, y);
+                    }
+                    ctx.stroke();
+                }
+
+                ctx.strokeStyle = '#1e293b';
+                ctx.lineWidth = 1.5 / this.camZoom;
+                ctx.strokeRect(0, 0, this.cols, this.rows);
+
+                // Holograma fantasma de previsualización
+                if (this.mouseWorldX >= 0 && this.mouseWorldX < this.cols &&
+                    this.mouseWorldY >= 0 && this.mouseWorldY < this.rows) {
+
+                    if (this.tool === 'stamp' && this.activeStamp) {
+                        const coords = PATTERNS[this.activeStamp];
+                        ctx.fillStyle = 'rgba(0, 255, 204, 0.55)';
+                        for (let i = 0; i < coords.length; i++) {
+                            const [py, px] = coords[i];
+                            const gx = (this.mouseWorldX + px + this.cols) % this.cols;
+                            const gy = (this.mouseWorldY + py + this.rows) % this.rows;
+                            ctx.fillRect(gx, gy, 1, 1);
+                        }
+                    } else {
+                        ctx.strokeStyle = 'rgba(0, 255, 204, 0.75)';
+                        ctx.lineWidth = 1.2 / this.camZoom;
+                        ctx.beginPath();
+                        ctx.arc(this.mouseWorldX + 0.5, this.mouseWorldY + 0.5, this.brushRadius, 0, Math.PI * 2);
+                        ctx.stroke();
+                    }
+                }
+
+                ctx.restore();
+
+                // Dibujar Radar Holográfico en miniatura
+                this.drawMinimapRadar();
+            }
+
+            stampPatternAt(name, wx, wy) {
+                const coords = PATTERNS[name];
+                if (!coords) return;
+                for (let i = 0; i < coords.length; i++) {
+                    const [py, px] = coords[i];
+                    this.setCellState(wx + px, wy + py, 1);
+                }
+            }
+
+            importRLE(rleText) {
+                const parsed = parseRLE(rleText);
+                if (!parsed || parsed.cells.length === 0) {
+                    alert('No se detectaron células válidas en el código RLE.');
+                    return false;
+                }
+
+                const startX = Math.max(0, Math.floor((this.cols - (parsed.width || 30)) / 2));
+                const startY = Math.max(0, Math.floor((this.rows - (parsed.height || 20)) / 2));
+
+                for (let i = 0; i < parsed.cells.length; i++) {
+                    const [r, c] = parsed.cells[i];
+                    this.setCellState(startX + c, startY + r, 1);
+                }
+
+                if (parsed.rule) {
+                    const r = parsed.rule.toLowerCase();
+                    if (r.includes('b36/s23')) {
+                        this.currentRule = RULESETS.highlife;
+                        document.getElementById('selectRule').value = 'highlife';
+                    } else if (r.includes('b3/s23')) {
+                        this.currentRule = RULESETS.conway;
+                        document.getElementById('selectRule').value = 'conway';
+                    } else if (r.includes('b2/s')) {
+                        this.currentRule = RULESETS.seeds;
+                        document.getElementById('selectRule').value = 'seeds';
+                    } else if (r.includes('b3678/s34678')) {
+                        this.currentRule = RULESETS.daynight;
+                        document.getElementById('selectRule').value = 'daynight';
+                    }
+                    document.getElementById('hudRule').textContent = this.currentRule.name;
+                }
+
+                this.updateTelemetryUI();
+                return true;
+            }
+
+            clearWorld() {
+                this.state.fill(0);
+                this.nextState.fill(0);
+                this.trail.fill(0);
+                this.activeMask.fill(0);
+                this.bitboard.fill(0);
+                this.nextBitboard.fill(0);
+                this.leniaField.fill(0);
+                this.nextLeniaField.fill(0);
+                this.activeCount = 0;
+                this.generation = 0;
+                this.aliveCount = 0;
+                this.cpuStepMs = 0;
+                this.updateTelemetryUI();
+            }
+
+            randomizeWorld(density = 0.2) {
+                this.clearWorld();
+                if (this.engineMode === 'lenia') {
+                    for (let y = 0; y < this.rows; y++) {
+                        for (let x = 0; x < this.cols; x++) {
+                            if (Math.random() < density * 0.5) {
+                                this.leniaField[y * this.cols + x] = Math.random() * 0.9;
+                            }
+                        }
+                    }
+                } else {
+                    for (let y = 0; y < this.rows; y++) {
+                        for (let x = 0; x < this.cols; x++) {
+                            if (Math.random() < density) {
+                                this.setCellState(x, y, 1);
+                            }
+                        }
+                    }
+                }
+                this.updateTelemetryUI();
+            }
+
+            seedDemoScene() {
+                this.clearWorld();
+                this.stampPatternAt('gosper', 20, 20);
+                this.stampPatternAt('gosper', 90, 15);
+                this.stampPatternAt('pulsar', 220, 50);
+                this.stampPatternAt('pulsar', 260, 120);
+                for (let i = 0; i < 6; i++) {
+                    this.stampPatternAt('spaceship', 40 + i * 22, 150);
+                }
+                this.updateTelemetryUI();
+            }
+
+            screenToWorld(clientX, clientY) {
+                const rect = this.canvas.getBoundingClientRect();
+                const sx = clientX - rect.left;
+                const sy = clientY - rect.top;
+                return {
+                    wx: Math.floor((sx - this.camX) / this.camZoom),
+                    wy: Math.floor((sy - this.camY) / this.camZoom),
+                    sx,
+                    sy
+                };
+            }
+
+            updateTelemetryUI() {
+                document.getElementById('metricGen').textContent = this.generation.toLocaleString();
+                document.getElementById('metricAlive').textContent = this.aliveCount.toLocaleString();
+                const ratio = ((this.activeCount / this.totalCells) * 100).toFixed(1);
+                document.getElementById('metricPrune').textContent = `${ratio}%`;
+                document.getElementById('metricCpu').textContent = `${this.cpuStepMs.toFixed(2)} ms`;
+            }
+
+            updateProfilerGraph(now) {
+                this.frameCount++;
+                const elapsed = now - this.lastFpsTick;
+                if (elapsed >= 350) {
+                    const fps = Math.round((this.frameCount * 1000) / elapsed);
+                    document.getElementById('fpsCounter').textContent = `${fps} FPS`;
+
+                    if (window.parent && window.parent !== window) {
+                        try {
+                            window.parent.postMessage({
+                                type: 'telemetry_bridge',
+                                module: 'automata',
+                                moduleName: 'CELL-ENGINE PRO',
+                                fps: fps,
+                                metricKey: 'Células Vivas',
+                                metricValue: `${this.aliveCount.toLocaleString()} vivas`,
+                                subtext: `${this.engineMode === 'bitboard' ? '⚡ Bitboard Vectorizado' : (this.engineMode === 'lenia' ? '🦠 Lenia Continuo' : this.currentRule.name)} @ ${this.tps} TPS`
+                            }, '*');
+                        } catch (e) {}
+                    }
+
+                    this.fpsHistory.copyWithin(0, 1);
+                    this.fpsHistory[this.fpsHistory.length - 1] = Math.min(144, fps);
+                    this.frameCount = 0;
+                    this.lastFpsTick = now;
+                    this.updateTelemetryUI();
+
+                    const pCtx = this.profCtx;
+                    const w = this.profCanvas.width;
+                    const h = this.profCanvas.height;
+                    pCtx.fillStyle = '#04070b';
+                    pCtx.fillRect(0, 0, w, h);
+
+                    const bw = w / this.fpsHistory.length;
+                    for (let i = 0; i < this.fpsHistory.length; i++) {
+                        const v = this.fpsHistory[i];
+                        const bh = Math.min(h, (v / 80) * h);
+                        pCtx.fillStyle = v >= 50 ? '#00ffcc' : (v >= 30 ? '#ffaa00' : '#ff2a55');
+                        pCtx.fillRect(i * bw, h - bh, bw - 0.5, bh);
+                    }
+                }
+            }
+
+            bindEvents() {
+                this.canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+                this.canvas.addEventListener('mousedown', (e) => {
+                    if (e.button === 1 || (e.button === 0 && e.altKey)) {
+                        this.isPanning = true;
+                        this.panStartX = e.clientX - this.camX;
+                        this.panStartY = e.clientY - this.camY;
+                        return;
+                    }
+
+                    const { wx, wy } = this.screenToWorld(e.clientX, e.clientY);
+
+                    if (this.tool === 'stamp' && this.activeStamp && e.button === 0) {
+                        this.stampPatternAt(this.activeStamp, wx, wy);
+                        this.updateTelemetryUI();
+                        return;
+                    }
+
+                    this.isPainting = true;
+                    this.paintValue = (e.button === 2) ? 0 : 1;
+                    this.paintBrushAt(wx, wy, this.paintValue);
+                    this.lastWorldX = wx;
+                    this.lastWorldY = wy;
+                    this.updateTelemetryUI();
+                });
+
+                window.addEventListener('mousemove', (e) => {
+                    const { wx, wy } = this.screenToWorld(e.clientX, e.clientY);
+                    this.mouseWorldX = wx;
+                    this.mouseWorldY = wy;
+
+                    if (this.isPanning) {
+                        this.camX = e.clientX - this.panStartX;
+                        this.camY = e.clientY - this.panStartY;
+                        return;
+                    }
+
+                    if (this.isPainting) {
+                        this.drawLineBresenham(this.lastWorldX, this.lastWorldY, wx, wy, this.paintValue);
+                        this.lastWorldX = wx;
+                        this.lastWorldY = wy;
+                    }
+                });
+
+                window.addEventListener('mouseup', () => {
+                    this.isPanning = false;
+                    this.isPainting = false;
+                });
+
+                this.canvas.addEventListener('wheel', (e) => {
+                    e.preventDefault();
+                    const { sx, sy } = this.screenToWorld(e.clientX, e.clientY);
+                    const worldXBefore = (sx - this.camX) / this.camZoom;
+                    const worldYBefore = (sy - this.camY) / this.camZoom;
+
+                    const zoomFactor = e.deltaY < 0 ? 1.15 : 0.87;
+                    this.camZoom = Math.max(1.2, Math.min(24, this.camZoom * zoomFactor));
+
+                    this.camX = sx - worldXBefore * this.camZoom;
+                    this.camY = sy - worldYBefore * this.camZoom;
+                    document.getElementById('hudZoom').textContent = `${this.camZoom.toFixed(1)}x`;
+                }, { passive: false });
+
+                // Navegación Interactiva del Radar Minimapa (Clic / Arrastre)
+                if (this.radarCanvas) {
+                    const handleRadarNav = (e) => {
+                        const rect = this.radarCanvas.getBoundingClientRect();
+                        const rx = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+                        const ry = Math.max(0, Math.min(rect.height, e.clientY - rect.top));
+
+                        const targetWorldX = (rx / rect.width) * this.cols;
+                        const targetWorldY = (ry / rect.height) * this.rows;
+
+                        this.camX = this.canvas.width * 0.5 - targetWorldX * this.camZoom;
+                        this.camY = this.canvas.height * 0.5 - targetWorldY * this.camZoom;
+                    };
+
+                    this.radarCanvas.addEventListener('mousedown', (e) => {
+                        this.isRadarNavigating = true;
+                        handleRadarNav(e);
+                    });
+
+                    window.addEventListener('mousemove', (e) => {
+                        if (this.isRadarNavigating) handleRadarNav(e);
+                    });
+
+                    window.addEventListener('mouseup', () => {
+                        this.isRadarNavigating = false;
+                    });
+                }
+
+                // Selector de Arquitectura del Motor (Fase 4: Bitboard & Lenia)
+                const selectEngineMode = document.getElementById('selectEngineMode');
+                const engineBadge = document.getElementById('engineBadge');
+                if (selectEngineMode) {
+                    selectEngineMode.addEventListener('change', (e) => {
+                        this.engineMode = e.target.value;
+                        if (this.engineMode === 'bitboard') {
+                            this.syncStateToBitboard();
+                            engineBadge.textContent = '⚡ BITBOARD 32B';
+                            engineBadge.style.color = '#38bdf8';
+                        } else if (this.engineMode === 'lenia') {
+                            engineBadge.textContent = '🦠 LENIA CONTINUO';
+                            engineBadge.style.color = '#c084fc';
+                            this.randomizeWorld(0.12);
+                        } else {
+                            engineBadge.textContent = 'ACTIVE-SET';
+                            engineBadge.style.color = '#00ffcc';
+                        }
+                    });
+                }
+
+                // Modo Turbo Bitboard
+                const btnTurbo = document.getElementById('btnTurboBitboard');
+                if (btnTurbo) {
+                    btnTurbo.addEventListener('click', () => {
+                        this.isTurboBitboard = !this.isTurboBitboard;
+                        if (this.isTurboBitboard) {
+                            this.engineMode = 'bitboard';
+                            if (selectEngineMode) selectEngineMode.value = 'bitboard';
+                            this.syncStateToBitboard();
+                            this.tps = 500;
+                            document.getElementById('rangeTps').value = 500;
+                            document.getElementById('valTps').textContent = '500 Gen/s';
+                            btnTurbo.classList.add('active-mode');
+                            btnTurbo.textContent = '⚡ Modo Turbo: 500+ Gen/s (ACTIVO)';
+                            engineBadge.textContent = '⚡ 500+ TPS TURBO';
+                            engineBadge.style.color = '#f59e0b';
+                        } else {
+                            this.tps = 60;
+                            document.getElementById('rangeTps').value = 60;
+                            document.getElementById('valTps').textContent = '60 Gen/s';
+                            btnTurbo.classList.remove('active-mode');
+                            btnTurbo.textContent = '⚡ Activar Modo Turbo 500+ TPS';
+                        }
+                    });
+                }
+
+                // Selector de Simetría Procedural (Fase 4)
+                const selectSymmetry = document.getElementById('selectSymmetry');
+                if (selectSymmetry) {
+                    selectSymmetry.addEventListener('change', (e) => {
+                        this.symmetryMode = e.target.value;
+                    });
+                }
+
+                const btnGenMandala = document.getElementById('btnGenMandala');
+                if (btnGenMandala) {
+                    btnGenMandala.addEventListener('click', () => {
+                        this.generateSymmetricMandala();
+                    });
+                }
+
+                // Botones de Control
+                const btnPlay = document.getElementById('btnPlay');
+                const stateBadge = document.getElementById('stateBadge');
+                const togglePlay = () => {
+                    this.isRunning = !this.isRunning;
+                    btnPlay.textContent = this.isRunning ? 'Pausar (Espacio)' : 'Reanudar (Espacio)';
+                    stateBadge.textContent = this.isRunning ? '● ACTIVO' : '❚❚ PAUSADO';
+                    stateBadge.style.color = this.isRunning ? '#00ffcc' : '#ffaa00';
+                };
+
+                btnPlay.addEventListener('click', togglePlay);
+
+                document.getElementById('btnStep').addEventListener('click', () => {
+                    if (this.isRunning) togglePlay();
+                    this.stepSimulation();
+                    this.updateTelemetryUI();
+                });
+
+                document.getElementById('btnRandom').addEventListener('click', () => this.randomizeWorld(0.2));
+                document.getElementById('btnClear').addEventListener('click', () => this.clearWorld());
+                document.getElementById('btnResetCam').addEventListener('click', () => this.centerCamera());
+
+                // Sliders y Selectores
+                document.getElementById('rangeTps').addEventListener('input', (e) => {
+                    this.tps = parseInt(e.target.value, 10);
+                    document.getElementById('valTps').textContent = `${this.tps} Gen/s`;
+                });
+
+                document.getElementById('rangeDecay').addEventListener('input', (e) => {
+                    this.decaySpeed = parseInt(e.target.value, 10);
+                    document.getElementById('valDecay').textContent = this.decaySpeed < 15 ? 'Larga' : 'Rápida';
+                });
+
+                document.getElementById('rangeBrush').addEventListener('input', (e) => {
+                    this.brushRadius = parseInt(e.target.value, 10);
+                    document.getElementById('valBrush').textContent = `${this.brushRadius} px`;
+                });
+
+                document.getElementById('selectRule').addEventListener('change', (e) => {
+                    this.currentRule = RULESETS[e.target.value];
+                    document.getElementById('hudRule').textContent = this.currentRule.name;
+                });
+
+                document.getElementById('selectPalette').addEventListener('change', (e) => {
+                    this.currentPalette = e.target.value;
+                    this.buildColorLUTs();
+                });
+
+                // Selección de Herramientas y Estampas
+                const clearActiveBtns = () => {
+                    document.querySelectorAll('.tool-btn, .stamp-btn').forEach(b => b.classList.remove('active-mode'));
+                };
+
+                document.querySelectorAll('.tool-btn').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        clearActiveBtns();
+                        btn.classList.add('active-mode');
+                        this.tool = btn.dataset.tool;
+                        this.activeStamp = null;
+                        document.getElementById('hudTool').textContent = btn.textContent;
+                    });
+                });
+
+                document.querySelectorAll('.stamp-btn').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        clearActiveBtns();
+                        btn.classList.add('active-mode');
+                        this.tool = 'stamp';
+                        this.activeStamp = btn.dataset.stamp;
+                        document.getElementById('hudTool').textContent = `Holograma: ${btn.textContent}`;
+                    });
+                });
+
+                // Modal RLE
+                const rleModal = document.getElementById('rleModal');
+                const rleTextarea = document.getElementById('rleTextarea');
+                document.getElementById('btnOpenRleModal').addEventListener('click', () => {
+                    rleModal.classList.remove('hidden');
+                    rleTextarea.focus();
+                });
+                document.getElementById('btnCloseRle').addEventListener('click', () => {
+                    rleModal.classList.add('hidden');
+                });
+                document.querySelectorAll('.btn-preset').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const key = btn.dataset.preset;
+                        if (RLE_PRESETS[key]) {
+                            rleTextarea.value = RLE_PRESETS[key];
+                        }
+                    });
+                });
+                document.getElementById('btnPasteRle').addEventListener('click', async () => {
+                    try {
+                        const text = await navigator.clipboard.readText();
+                        rleTextarea.value = text;
+                    } catch (e) {
+                        alert('Por favor pega el código manualmente usando Ctrl+V dentro del cuadro.');
+                    }
+                });
+                document.getElementById('btnInjectRle').addEventListener('click', () => {
+                    const code = rleTextarea.value.trim();
+                    if (!code) {
+                        alert('Ingresa o pega un código RLE primero.');
+                        return;
+                    }
+                    if (this.importRLE(code)) {
+                        rleModal.classList.add('hidden');
+                    }
+                });
+
+                window.addEventListener('keydown', (e) => {
+                    if (e.code === 'Escape') {
+                        rleModal.classList.add('hidden');
+                    } else if (e.code === 'Space' && e.target !== rleTextarea) {
+                        e.preventDefault();
+                        togglePlay();
+                    }
+                });
+
+                window.addEventListener('resize', () => {
+                    this.resizeViewport();
+                    this.centerCamera();
+                });
+            }
+
+            startEngineLoop() {
+                const loop = (now) => {
+                    requestAnimationFrame(loop);
+                    this.updateProfilerGraph(now);
+
+                    const interval = 1000 / this.tps;
+                    if (this.isRunning && (now - this.lastSimTick >= interval)) {
+                        this.stepSimulation();
+                        this.lastSimTick = now;
+                    }
+                    this.renderFrame();
+                };
+                requestAnimationFrame(loop);
+            }
+        }
+
+        window.addEventListener('load', () => {
+            const engine = new AAACellularEngine();
+            engine.startEngineLoop();
+        });
+    </script>
+</body>
+
+</html>
